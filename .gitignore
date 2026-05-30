@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+backend/venv/
+
+# Environment variables
+.env
+
+# Database
+*.db
+
+# VS Code / Cursor
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db

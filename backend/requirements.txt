@@ -1,0 +1,18 @@
+# Web framework and ASGI server
+fastapi
+uvicorn[standard]
+
+# ORM and database abstraction
+sqlalchemy
+
+# Data validation and settings management
+pydantic
+pydantic-settings
+python-dotenv
+
+# Machine learning and numerical computing (threat scoring, anomaly detection)
+scikit-learn
+numpy
+
+# HTTP client (external integrations / threat intel feeds)
+requests
