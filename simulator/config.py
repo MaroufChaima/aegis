@@ -11,7 +11,7 @@ DEVICE_IDS = [f"WB-{i:03d}" for i in range(1, 16)]
 UAV_IDS = ["UAV-01", "UAV-02", "UAV-03", "UAV-04"]
 
 # Seconds between each simulator tick (one POST per device per tick)
-EMIT_INTERVAL = 5
+EMIT_INTERVAL = 15
 
 # FastAPI backend base URL
 API_URL = "http://localhost:8000"
