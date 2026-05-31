@@ -1,9 +1,9 @@
 """
-DeviceState — mutable runtime state for one simulated wearable device.
+DeviceState and UAVState — mutable runtime state for simulated field units.
 
-Each instance holds the current vitals for a single device and exposes an
-evolve() method that advances state by one tick, returning a dict that
-matches the TelemetryIn schema exactly.
+DeviceState: one wearable per victim; evolve() returns a TelemetryIn-compatible dict.
+UAVState:    one aerial relay UAV; evolve() returns a UAV position dict matching
+             the GET /api/uavs response shape.
 """
 
 import random
@@ -96,4 +96,74 @@ class DeviceState:
             "snr":          self.snr,
             "battery":      int(self.battery),
             "uav_relay_id": self.uav_relay_id,
+        }
+
+
+class UAVState:
+    """Simulates the position and power state of one aerial relay UAV.
+
+    Each UAV starts at a fixed patrol point above the zone and drifts
+    slightly each tick to simulate slow patrol movement. Battery drains
+    at 0.02% per tick (roughly double the wearable rate — UAVs are heavier).
+
+    The evolve() method returns a dict matching the GET /api/uavs response
+    shape and the ``uav_update`` WebSocket message payload.
+    """
+
+    COVERAGE_RADIUS = 800.0    # metres — fixed for prototype
+    ALTITUDE_BASE   = 100.0    # metres AGL centre
+    ALTITUDE_STD    = 5.0      # Gaussian jitter
+
+    def __init__(self, uav_id: str) -> None:
+        """Initialise a UAV at a randomised patrol position above the zone.
+
+        Args:
+            uav_id: Unique identifier, e.g. "UAV-01".
+        """
+        self.uav_id = uav_id
+
+        # Space UAVs evenly within the zone so coverage is distributed
+        idx = int(uav_id.split("-")[1]) - 1
+        angle_offset = (idx / len(UAV_IDS)) * 0.015  # spread within zone
+        self.latitude  = ZONE_CENTER[0] + angle_offset
+        self.longitude = ZONE_CENTER[1] + angle_offset
+
+        self.altitude = self.ALTITUDE_BASE + random.uniform(-10, 10)
+        self.battery  = float(random.randint(60, 100))
+        self.status   = "active"
+
+    def evolve(self, connected_devices: int = 0) -> dict:
+        """Advance UAV state by one tick and return a position dict.
+
+        Changes per tick:
+        - Position:  Random walk ±0.0002 degrees (UAVs move faster than victims)
+        - Altitude:  Gaussian jitter ±5 m around 100 m AGL
+        - Battery:   Drains 0.02% per tick
+        - Status:    "returning" when battery < 15%, "active" otherwise
+
+        Args:
+            connected_devices: Number of wearable devices currently relaying
+                               through this UAV (computed by the simulator loop).
+
+        Returns:
+            Dict matching the GET /api/uavs and ``uav_update`` payload shapes.
+        """
+        self.latitude  += random.uniform(-0.0002, 0.0002)
+        self.longitude += random.uniform(-0.0002, 0.0002)
+        self.altitude   = round(
+            self.ALTITUDE_BASE + random.gauss(0, self.ALTITUDE_STD), 1
+        )
+        self.battery = round(max(0.0, self.battery - 0.02), 4)
+        self.status  = "returning" if self.battery < 15 else "active"
+
+        return {
+            "uav_id":           self.uav_id,
+            "timestamp":        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "latitude":         round(self.latitude, 6),
+            "longitude":        round(self.longitude, 6),
+            "altitude":         self.altitude,
+            "battery":          int(self.battery),
+            "status":           self.status,
+            "coverage_radius":  self.COVERAGE_RADIUS,
+            "connected_devices": connected_devices,
         }
