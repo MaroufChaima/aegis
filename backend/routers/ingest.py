@@ -17,12 +17,13 @@ from services.telemetry_service import insert_telemetry
 from services.device_service import upsert_device
 from services.alert_service import create_alert
 from ai import run_ai_pipeline
+from websocket_manager import manager, make_telemetry_update, make_alert_message
 
 router = APIRouter(prefix="/api", tags=["ingest"])
 
 
 @router.post("/ingest", status_code=status.HTTP_200_OK)
-def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
+async def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
     """Accept one telemetry packet from the simulator and persist it.
 
     Processing steps (in order):
@@ -54,8 +55,13 @@ def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
     ai_result = run_ai_pipeline(data, db)
     upsert_device(db, data, ai_result)
 
+    # Broadcast telemetry update to all connected dashboard clients
+    await manager.broadcast(make_telemetry_update(data, ai_result))
+
+    # Persist and broadcast each alert produced by the AI pipeline
     for alert_dict in ai_result["alerts"]:
-        create_alert(db, alert_dict)
+        alert_record = create_alert(db, alert_dict)
+        await manager.broadcast(make_alert_message(alert_record))
 
     return {
         "status":         "ok",
