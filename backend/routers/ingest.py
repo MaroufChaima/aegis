@@ -13,6 +13,7 @@ from database import get_db
 from schemas.telemetry import TelemetryIn
 from services.preprocessing import validate_ranges, deduplicate, tag_signal_quality
 from services.telemetry_service import insert_telemetry
+from services.device_service import upsert_device
 
 router = APIRouter(prefix="/api", tags=["ingest"])
 
@@ -43,6 +44,7 @@ def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
     tag_signal_quality(data)
 
     record = insert_telemetry(db, data)
+    upsert_device(db, data)
 
     return {
         "status": "ok",

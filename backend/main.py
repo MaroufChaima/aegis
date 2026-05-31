@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from routers.ingest import router as ingest_router
+from routers.victims import router as victims_router
 
 app = FastAPI()
 
@@ -20,3 +21,4 @@ def health():
 
 
 app.include_router(ingest_router)
+app.include_router(victims_router)
