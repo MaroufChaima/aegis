@@ -3,7 +3,8 @@ Ingest router — receives telemetry packets from the simulator.
 
 Single endpoint: POST /api/ingest
 Pipeline: schema validation (Pydantic) → range check → deduplication
-          → signal quality tagging → DB insert → 200 response.
+          → signal quality tagging → DB insert → AI pipeline
+          → device upsert (with AI scores) → alert persistence → 200 response.
 """
 
 from fastapi import APIRouter, Depends, status
@@ -14,6 +15,8 @@ from schemas.telemetry import TelemetryIn
 from services.preprocessing import validate_ranges, deduplicate, tag_signal_quality
 from services.telemetry_service import insert_telemetry
 from services.device_service import upsert_device
+from services.alert_service import create_alert
+from ai import run_ai_pipeline
 
 router = APIRouter(prefix="/api", tags=["ingest"])
 
@@ -28,14 +31,18 @@ def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
         2. validate_ranges performs an explicit range guard as a second layer.
         3. deduplicate queries the DB and raises 409 if the packet is a duplicate.
         4. tag_signal_quality annotates the dict with a poor_signal flag.
-        5. insert_telemetry writes the record to SQLite.
+        5. insert_telemetry writes the raw telemetry row to SQLite.
+        6. run_ai_pipeline scores the packet (triage + anomaly + alert decisions).
+        7. upsert_device writes current vitals and AI scores to the devices table.
+        8. create_alert persists each alert produced by the pipeline.
 
     Args:
         payload: Validated TelemetryIn parsed from the request body.
         db:      Injected SQLAlchemy session from get_db().
 
     Returns:
-        JSON with device_id, timestamp, and the assigned row id.
+        JSON with device_id, timestamp, row id, severity_score, priority_class,
+        and alert count.
     """
     data = payload.model_dump()
 
@@ -43,12 +50,19 @@ def ingest(payload: TelemetryIn, db: Session = Depends(get_db)):
     deduplicate(db, data)
     tag_signal_quality(data)
 
-    record = insert_telemetry(db, data)
-    upsert_device(db, data)
+    record    = insert_telemetry(db, data)
+    ai_result = run_ai_pipeline(data, db)
+    upsert_device(db, data, ai_result)
+
+    for alert_dict in ai_result["alerts"]:
+        create_alert(db, alert_dict)
 
     return {
-        "status": "ok",
-        "device_id": record.device_id,
-        "timestamp": record.timestamp,
-        "id": record.id,
+        "status":         "ok",
+        "device_id":      record.device_id,
+        "timestamp":      record.timestamp,
+        "id":             record.id,
+        "severity_score": ai_result["severity_score"],
+        "priority_class": ai_result["priority_class"],
+        "alert_count":    len(ai_result["alerts"]),
     }
