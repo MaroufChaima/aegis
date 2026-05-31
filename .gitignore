@@ -1,20 +1,20 @@
 # Python
 __pycache__/
 *.pyc
-
-# Virtual environments
 venv/
-backend/venv/
-
-# Environment variables
 .env
+
+# Node
+node_modules/
+dist/
+.vite/
 
 # Database
 *.db
+*.sqlite3
 
-# VS Code / Cursor
-.vscode/
+# Logs
+*.log
 
-# OS files
+# OS
 .DS_Store
-Thumbs.db
