@@ -75,20 +75,6 @@ function PieTooltipContent({ active, payload }) {
   )
 }
 
-// Custom centre label for donut
-function DonutLabel({ viewBox, total }) {
-  const { cx, cy } = viewBox
-  return (
-    <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central">
-      <tspan x={cx} dy="-0.4em" fontSize="22" fontWeight="bold" fill="#fff">
-        {total}
-      </tspan>
-      <tspan x={cx} dy="1.4em" fontSize="11" fill="#9ca3af">
-        victims
-      </tspan>
-    </text>
-  )
-}
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -119,7 +105,7 @@ export default function AnalyticsPage() {
       setError(null)
       setLastRefresh(new Date().toLocaleTimeString())
     } catch (err) {
-      setError('Cannot reach backend — is uvicorn running?')
+      setError(`Analytics error: ${err.message}`)
     }
   }, [])
 
@@ -242,25 +228,31 @@ export default function AnalyticsPage() {
             <p className="text-gray-500 text-sm text-center py-16">No device data yet.</p>
           ) : (
             <>
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={88}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry) => (
-                      <Cell key={entry.name} fill={PRIORITY_PIE_COLORS[entry.name] ?? '#6b7280'} />
-                    ))}
-                    <DonutLabel total={totalVictims} />
-                  </Pie>
-                  <PieTooltip content={<PieTooltipContent />} />
-                </PieChart>
-              </ResponsiveContainer>
+              <div className="relative">
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={88}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {pieData.map((entry) => (
+                        <Cell key={entry.name} fill={PRIORITY_PIE_COLORS[entry.name] ?? '#6b7280'} />
+                      ))}
+                    </Pie>
+                    <PieTooltip content={<PieTooltipContent />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                {/* Centre label — CSS overlay avoids Recharts viewBox prop issues */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-2xl font-bold text-white leading-none">{totalVictims}</span>
+                  <span className="text-xs text-gray-400 mt-1">victims</span>
+                </div>
+              </div>
               {/* Legend */}
               <div className="flex justify-center gap-5 mt-2">
                 {pieData.map((d) => (

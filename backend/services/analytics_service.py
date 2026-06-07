@@ -114,12 +114,23 @@ def get_timeseries(db: Session) -> list[dict]:
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # SQLite: bucket by floor(minute / 5) * 5
+    # SQLite: bucket by floor(minute / 5) * 5.
+    #
+    # Two SQLAlchemy / SQLite pitfalls avoided here:
+    #  1. printf('%02d') is only available in SQLite >= 3.38.0 (Feb 2022).
+    #     We use substr('00' || n, -2) instead, which works on all versions.
+    #  2. SQLAlchemy's text() parser treats any :word token as a named bind
+    #     parameter. Writing the colon as the SQL string literal ':' causes
+    #     SQLAlchemy to parse ':00Z' as bind parameter "00Z" and crash with
+    #     "A value is required for bind parameter '00Z'".
+    #     We use char(58) (ASCII for ':') to produce the colon character
+    #     without triggering the parameter parser.
     sql = text("""
         SELECT
-            strftime('%Y-%m-%dT%H', timestamp) || ':'
-                || printf('%02d', (CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5)
-                || ':00Z'                                           AS bin,
+            strftime('%Y-%m-%dT%H', timestamp)
+                || char(58)
+                || substr('00' || CAST((CAST(strftime('%M', timestamp) AS INTEGER) / 5) * 5 AS TEXT), -2)
+                || char(58) || '00Z'                               AS bin,
             COUNT(*)                                               AS total_count,
             SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS crit_count
         FROM alerts
