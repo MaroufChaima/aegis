@@ -1,24 +1,21 @@
 """
-Standalone script — drops and recreates all database tables.
-
-Safe to run multiple times. Always produces a schema that exactly matches
-the current SQLAlchemy models. Use freely during development; do not run
-against a database with real data you need to keep.
-
-    cd backend
-    python init_db.py
+Database initialization script for AEGIS. Run this once before starting the backend:
+python init_db.py. This script is safe to run multiple times — it uses create_all
+which skips tables that already exist. It will NOT delete existing data.
 """
 
-from database import Base, engine
-import models  # noqa: F401 — registers all ORM classes with Base.metadata
+from database import engine, Base
+import models
 
-Base.metadata.drop_all(bind=engine)
-Base.metadata.create_all(bind=engine)
-print("Database recreated successfully.")
-print("Tables:", list(Base.metadata.tables.keys()))
 
-# Print columns for devices table so schema can be verified at a glance
-from sqlalchemy import inspect as sa_inspect
-inspector = sa_inspect(engine)
-cols = [c["name"] for c in inspector.get_columns("devices")]
-print("devices columns:", cols)
+def init_db():
+    print("Initializing AEGIS database...")
+    Base.metadata.create_all(bind=engine)
+    print("Database initialized. Tables created or verified:")
+    for table_name in Base.metadata.tables.keys():
+        print(f"  - {table_name}")
+    print("init_db complete.")
+
+
+if __name__ == "__main__":
+    init_db()
