@@ -7,6 +7,7 @@ from routers.uavs import router as uavs_router
 from routers.simulation import router as simulation_router
 from routers.analytics import router as analytics_router
 from routers.profiles import router as profiles_router
+from routers.ingest_v2_stub import router as ingest_v2_stub_router
 from websocket_manager import manager
 
 app = FastAPI()
@@ -48,3 +49,4 @@ app.include_router(uavs_router)
 app.include_router(simulation_router)
 app.include_router(analytics_router)
 app.include_router(profiles_router)
+app.include_router(ingest_v2_stub_router)
