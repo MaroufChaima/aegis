@@ -12,7 +12,7 @@ import random
 
 from victim_factory import create_all_victims
 
-API_URL                 = "http://localhost:8000/api/v2/ingest-stub"
+API_URL                 = "http://localhost:8000/api/v2/ingest"
 EMIT_INTERVAL_SECONDS   = 5
 UAV_EMIT_INTERVAL_TICKS = 2
 
