@@ -1,3 +1,4 @@
+# LEGACY: This is the original DeviceState model. Preserved for reference. Do not import from this file.
 """
 DeviceState and UAVState — mutable runtime state for simulated field units.
 

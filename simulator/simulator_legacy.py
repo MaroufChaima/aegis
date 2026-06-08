@@ -1,3 +1,4 @@
+# LEGACY: This is the original single-device simulator. Preserved for reference. Do not run this file.
 """
 AEGIS Telemetry Simulator — steady-state emission loop.
 
