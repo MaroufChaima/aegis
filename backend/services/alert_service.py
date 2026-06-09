@@ -27,8 +27,9 @@ def create_alert(db: Session, alert_dict: dict) -> Alert:
     Returns:
         The newly created Alert ORM instance with its auto-assigned id.
     """
+    device_id = alert_dict.get("victim_id") or alert_dict.get("device_id", "UNKNOWN")
     record = Alert(
-        device_id    = alert_dict["device_id"],
+        device_id    = device_id,
         timestamp    = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         alert_type   = alert_dict["alert_type"],
         severity     = alert_dict["severity"],

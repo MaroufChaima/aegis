@@ -111,20 +111,46 @@ def insert_telemetry_readings(
     return rows_inserted
 
 
+def update_readings_with_ai_results(db: Session, packet_id: int, ai_result: dict) -> None:
+    """Updates the is_anomaly_global and is_anomaly_personal flags on telemetry_readings
+    rows after the AI pipeline has run. Called after insert_telemetry_readings so that
+    the rows exist before we try to update them. Separate from the insert to keep the
+    AI pipeline result handling isolated."""
+
+    global_flags   = ai_result.get("global_anomaly_flags", {})
+    personal_flags = ai_result.get("personal_anomaly_flags", {})
+
+    all_sensors = set(global_flags.keys()) | set(personal_flags.keys())
+
+    for sensor_type_id in all_sensors:
+        global_flag   = 1 if global_flags.get(sensor_type_id) else 0
+        personal_flag = 1 if personal_flags.get(sensor_type_id) else 0
+
+        db.execute(
+            text(
+                "UPDATE telemetry_readings "
+                "SET is_anomaly_global = :global_flag, is_anomaly_personal = :personal_flag "
+                "WHERE packet_id = :packet_id AND sensor_type_id = :sensor_type_id"
+            ),
+            {
+                "global_flag":    global_flag,
+                "personal_flag":  personal_flag,
+                "packet_id":      packet_id,
+                "sensor_type_id": sensor_type_id,
+            },
+        )
+
+    db.commit()
+
+
 def upsert_victim_status(
     db: Session,
     victim_id: str,
     uav_relay_id: str,
     last_seen: str,
 ) -> None:
-    """Updates the victim record with the latest UAV relay and last_seen timestamp.
-    Called after every successful packet ingestion."""
-
-    db.execute(
-        text(
-            "UPDATE victims SET uav_relay_id = :uav_relay_id "
-            "WHERE victim_id = :victim_id"
-        ),
-        {"uav_relay_id": uav_relay_id, "victim_id": victim_id},
-    )
-    db.commit()
+    """No-op in the WBAN architecture. UAV relay info is stored per-packet in
+    coordinator_packets.uav_relay_id. The victims table does not carry a mutable
+    last_seen or uav_relay_id column — those fields live on the legacy devices table.
+    Function signature kept for call-site compatibility."""
+    pass

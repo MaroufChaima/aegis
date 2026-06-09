@@ -6,6 +6,14 @@ yet called here — they are added in phases M4 and M5.
 """
 
 import datetime
+import json, time, os
+
+# #region agent log - debug e91cd1
+_DBG_LOG = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'debug-e91cd1.log')
+def _dbg(msg, data, hyp):
+    entry = {"sessionId":"e91cd1","timestamp":int(time.time()*1000),"location":"routers/ingest_v2.py","message":msg,"data":data,"hypothesisId":hyp}
+    open(_DBG_LOG,'a').write(json.dumps(entry)+'\n')
+# #endregion
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -17,8 +25,11 @@ from services.telemetry_service_v2 import (
     insert_coordinator_packet,
     insert_telemetry_readings,
     upsert_victim_status,
+    update_readings_with_ai_results,
 )
-from services.victim_service import victim_exists
+from services.alert_service import create_alert
+from ai import run_ai_pipeline
+from services.victim_service import victim_exists, get_victim_profile_for_pipeline
 from services.preprocessing.imputation_service import impute_missing_readings, update_recent_readings_cache
 from services.preprocessing.confidence_scorer import assign_confidence_scores, compute_packet_confidence
 from services.preprocessing.packet_validator import validate_reading_ranges
@@ -31,8 +42,20 @@ async def ingest_coordinator_packet(
     packet: CoordinatorPacketIn,
     db: Session = Depends(get_db),
 ):
+    # #region agent log - debug e91cd1
+    _dbg("handler_entered", {"victim_id": packet.victim_id}, "H-B")
+    # #endregion
+
     # STEP 1 — Check victim exists
-    if not victim_exists(db, packet.victim_id):
+    # #region agent log - debug e91cd1
+    try:
+        _exists = victim_exists(db, packet.victim_id)
+        _dbg("victim_exists_result", {"victim_id": packet.victim_id, "exists": _exists}, "H-A")
+    except Exception as _e:
+        _dbg("victim_exists_exception", {"error": str(_e), "type": type(_e).__name__}, "H-C")
+        raise
+    # #endregion
+    if not _exists:
         raise HTTPException(
             status_code=422,
             detail=(
@@ -40,6 +63,9 @@ async def ingest_coordinator_packet(
                 "Victim must be seeded before ingesting packets."
             ),
         )
+    # #region agent log - debug e91cd1
+    _dbg("past_victim_check", {"victim_id": packet.victim_id}, "H-A")
+    # #endregion
 
     # STEP 2 — Check for duplicate
     if check_duplicate_packet(db, packet.victim_id, packet.timestamp):
@@ -107,10 +133,34 @@ async def ingest_coordinator_packet(
         packet.timestamp,
     )
 
+    # STEP 6b — Load victim profile
+    victim_profile = get_victim_profile_for_pipeline(db, packet.victim_id)
+
+    # STEP 6c — Build flat readings dict for AI (use imputed values where raw is missing)
+    flat_readings = {}
+    for sensor_id, reading_data in enriched_readings.items():
+        if reading_data["raw_value"] is not None:
+            flat_readings[sensor_id] = reading_data["raw_value"]
+        elif reading_data["imputed_value"] is not None:
+            flat_readings[sensor_id] = reading_data["imputed_value"]
+
+    # STEP 6d — Run AI pipeline
+    ai_result = run_ai_pipeline(packet.victim_id, flat_readings, victim_profile, sos_active=False)
+
+    # STEP 6e — Update anomaly flags in database
+    update_readings_with_ai_results(db, packet_id, ai_result)
+
+    # STEP 6f — Create any generated alerts
+    for alert_dict in ai_result.get("alerts", []):
+        alert_dict["packet_id"] = packet_id
+        create_alert(db, alert_dict)
+
     # STEP 7 — Print success log
     print(
         f"[INGEST] victim={packet.victim_id} packet_id={packet_id} "
-        f"completeness={packet.packet_completeness:.2f} readings={readings_stored}"
+        f"completeness={packet.packet_completeness:.2f} "
+        f"score={ai_result['severity_score']} priority={ai_result['priority_class']} "
+        f"alerts={len(ai_result['alerts'])}"
     )
 
     # STEP 8 — Return response
