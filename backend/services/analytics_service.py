@@ -12,9 +12,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from models.alert import Alert
-from models.device import Device
-from models.telemetry import Telemetry
 from models.uav import UAVPosition
+from services.victim_state_service import get_summary_stats
 
 
 def get_summary(db: Session) -> dict:
@@ -30,33 +29,13 @@ def get_summary(db: Session) -> dict:
     Returns:
         Dict matching the API_FLOW.md summary response shape.
     """
-    # --- Victim / device counts ---
-    devices = db.query(Device).all()
-    total_victims = len(devices)
-
-    victims_by_priority: dict[str, int] = {"P1": 0, "P2": 0, "P3": 0}
-    victims_by_status:   dict[str, int] = {"online": 0, "offline": 0, "sos": 0}
-    hr_values:   list[float] = []
-    temp_values: list[float] = []
-
-    for dev in devices:
-        pc = dev.priority_class or "P3"
-        if pc in victims_by_priority:
-            victims_by_priority[pc] += 1
-
-        st = dev.status or "online"
-        if st in victims_by_status:
-            victims_by_status[st] += 1
-        else:
-            victims_by_status["online"] += 1
-
-        if dev.heart_rate is not None:
-            hr_values.append(dev.heart_rate)
-        if dev.temperature is not None:
-            temp_values.append(dev.temperature)
-
-    avg_hr   = round(sum(hr_values)   / len(hr_values),   1) if hr_values   else 0.0
-    avg_temp = round(sum(temp_values) / len(temp_values), 1) if temp_values else 0.0
+    # --- Victim / device counts (from WBAN victim_current_state table) ---
+    wban_stats = get_summary_stats(db)
+    total_victims      = wban_stats["total_victims"]
+    victims_by_priority = {"P1": 0, "P2": 0, "P3": 0, **wban_stats["victims_by_priority"]}
+    victims_by_status   = {"online": 0, "offline": 0, "sos": 0, **wban_stats["victims_by_status"]}
+    avg_hr   = wban_stats["avg_heart_rate"]   or 0.0
+    avg_temp = wban_stats["avg_temperature"]  or 0.0
 
     # --- Alert counts (last 60 minutes) ---
     one_hour_ago = (
@@ -77,11 +56,14 @@ def get_summary(db: Session) -> dict:
 
     # --- UAV stats ---
     uavs = db.query(UAVPosition).all()
-    uavs_online = sum(1 for u in uavs if u.status in ("active", "returning"))
+    uavs_online = wban_stats["uavs_online"]
 
-    # Network coverage: fraction of devices whose UAV relay is active
+    # Network coverage: victims whose relay UAV is currently active
     active_relay_ids = {u.uav_id for u in uavs if u.status in ("active", "returning")}
-    covered = sum(1 for d in devices if d.uav_relay_id in active_relay_ids)
+    relay_rows = db.execute(text(
+        "SELECT uav_relay_id FROM victim_current_state WHERE uav_relay_id IS NOT NULL"
+    )).fetchall()
+    covered = sum(1 for r in relay_rows if r[0] in active_relay_ids)
     network_coverage_pct = round(covered / total_victims * 100) if total_victims else 0
 
     return {
