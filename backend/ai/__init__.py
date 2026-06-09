@@ -1,99 +1,88 @@
 """
-AI pipeline entry point for the AEGIS backend.
+AI pipeline entry point for the AEGIS WBAN backend.
 
-Exports a single function, ``run_ai_pipeline``, that chains the three AI
-modules in the order documented in SIMPLIFIED_AI_MODULES.md:
-
-    triage_scorer → anomaly_detector → alert_generator
-
-Call this once per validated telemetry packet on the ingest path.
-The db parameter is accepted for future use (e.g. querying device history
-for seconds_since_movement) but the AI modules themselves remain pure —
-no DB writes happen here.
+Exports a single function, run_ai_pipeline, that chains all AI modules using
+personalized victim profiles and thresholds. All AI internals are hidden behind
+this interface — the ingest router calls only this function.
 """
 
-import logging
-from sqlalchemy.orm import Session
-
+from ai.threshold_engine import resolve_thresholds, check_global_anomaly, check_personal_anomaly
 from ai.triage_scorer import compute_severity_score, classify_priority
-from ai.anomaly_detector import detector
+from ai.detector_registry import predict as detect_anomaly
 from ai.alert_generator import decide_alerts
 
-log = logging.getLogger(__name__)
 
+def run_ai_pipeline(
+    victim_id: str,
+    readings_dict: dict,
+    victim_profile: dict,
+    sos_active: bool = False,
+    seconds_without_movement: float = 0,
+    seconds_offline: float = 0,
+) -> dict:
+    """Runs the complete AI pipeline for one coordinator packet. Takes the victim_id,
+    their current readings (already imputed), and their physiological profile. Returns
+    a comprehensive result dict containing triage score, priority class, anomaly
+    detection result, per-sensor anomaly flags for both global and personal standards,
+    and any alerts to be generated. This is the only function the ingest router calls —
+    all AI internals are hidden behind this interface."""
 
-def run_ai_pipeline(telemetry: dict, db: Session) -> dict:
-    """Run the full AI pipeline for one telemetry packet.
+    # STEP 1 — Resolve personalized thresholds
+    thresholds = resolve_thresholds(victim_profile)
 
-    Chains three modules in order:
+    # STEP 2 — Per-sensor anomaly flags (global and personal)
+    global_flags   = {}
+    personal_flags = {}
+    for sensor_type_id, value in readings_dict.items():
+        if value is not None:
+            global_flags[sensor_type_id]   = check_global_anomaly(sensor_type_id, value)
+            personal_flags[sensor_type_id] = check_personal_anomaly(sensor_type_id, value, thresholds)
+        else:
+            global_flags[sensor_type_id]   = False
+            personal_flags[sensor_type_id] = False
 
-    1. **Triage scorer** — rule-based weighted scoring produces a
-       ``severity_score`` (0–100) and ``priority_class`` (P1/P2/P3).
-    2. **Anomaly detector** — IsolationForest predicts whether the
-       packet's vital pattern is statistically unusual relative to the
-       population of recent readings.
-    3. **Alert generator** — evaluates trigger conditions against the
-       triage and anomaly results; applies per-device cooldowns to
-       suppress duplicate alerts.
+    # STEP 3 — Personalized anomaly detection
+    anomaly_result = detect_anomaly(victim_id, readings_dict)
 
-    The ``db`` session is passed through so future phases can query
-    device history (e.g. last-movement timestamp) without changing this
-    function's signature.  The AI modules themselves perform no DB access.
+    # STEP 4 — Triage scoring using personalized thresholds
+    severity_score = compute_severity_score(
+        readings_dict,
+        thresholds,
+        sos_active,
+        seconds_without_movement,
+        seconds_offline,
+    )
 
-    Args:
-        telemetry: Validated, preprocessed telemetry dict from the ingest
-                   pipeline.  Must contain at minimum: device_id, heart_rate,
-                   temperature, sos_signal, movement, rssi, battery.
-                   Optional: seconds_since_movement, seconds_since_last_seen.
-        db:        SQLAlchemy session — available for history queries in
-                   later phases; currently unused by the AI modules.
-
-    Returns:
-        Dict with the following keys:
-
-        severity_score  (int)        0–100 from the rule-based scorer
-        priority_class  (str)        "P1" | "P2" | "P3"
-        is_anomaly      (bool)       True if IsolationForest flagged the packet
-        anomaly_score   (float)      Raw IsolationForest score (more negative =
-                                     more anomalous); 0.0 during cold start
-        confidence      (float)      0.0–1.0 anomaly confidence
-        alerts          (list[dict]) Zero or more alert dicts ready for
-                                     alert_service.create_alert(); empty list
-                                     if no thresholds were breached
-    """
-    # Step 1 — rule-based triage
-    severity_score = compute_severity_score(telemetry)
+    # STEP 5 — Priority classification
     priority_class = classify_priority(severity_score)
 
-    log.debug(
-        "Triage: device=%s score=%d priority=%s",
-        telemetry.get("device_id"), severity_score, priority_class,
-    )
-
-    # Step 2 — ML anomaly detection (singleton preserves model state)
-    anomaly = detector.predict(telemetry)
-
-    log.debug(
-        "Anomaly: device=%s is_anomaly=%s confidence=%.2f",
-        telemetry.get("device_id"), anomaly["is_anomaly"], anomaly["confidence"],
-    )
-
-    # Step 3 — alert generation
-    ai_result = {
+    # STEP 6 — Alert generation
+    triage_result = {
         "severity_score": severity_score,
         "priority_class": priority_class,
-        "is_anomaly":     anomaly["is_anomaly"],
-        "confidence":     anomaly["confidence"],
     }
-    alerts = decide_alerts(telemetry, ai_result)
+    alerts = decide_alerts(
+        victim_id,
+        readings_dict,
+        thresholds,
+        triage_result,
+        anomaly_result,
+        sos_active,
+        victim_profile,
+    )
 
+    # STEP 7 — Return full pipeline result
     return {
-        "severity_score": severity_score,
-        "priority_class": priority_class,
-        "is_anomaly":     anomaly["is_anomaly"],
-        "anomaly_score":  anomaly["anomaly_score"],
-        "confidence":     anomaly["confidence"],
-        "alerts":         alerts,
+        "severity_score":        severity_score,
+        "priority_class":        priority_class,
+        "is_anomaly":            anomaly_result["is_anomaly"],
+        "anomaly_score":         anomaly_result["anomaly_score"],
+        "anomaly_confidence":    anomaly_result["confidence"],
+        "detector_status":       anomaly_result["detector_status"],
+        "global_anomaly_flags":  global_flags,
+        "personal_anomaly_flags": personal_flags,
+        "thresholds_used":       thresholds,
+        "alerts":                alerts,
     }
 
 
