@@ -19,6 +19,9 @@ from services.telemetry_service_v2 import (
     upsert_victim_status,
 )
 from services.victim_service import victim_exists
+from services.preprocessing.imputation_service import impute_missing_readings, update_recent_readings_cache
+from services.preprocessing.confidence_scorer import assign_confidence_scores, compute_packet_confidence
+from services.preprocessing.packet_validator import validate_reading_ranges
 
 router = APIRouter()
 
@@ -78,10 +81,23 @@ async def ingest_coordinator_packet(
             detail="Failed to store coordinator packet",
         )
 
-    # STEP 5 — Insert telemetry readings
-    readings_stored = insert_telemetry_readings(
-        db, packet_id, packet.victim_id, packet.timestamp, packet.readings
+    # STEP 5a — Run imputation
+    enriched_readings = impute_missing_readings(
+        db, packet.victim_id, packet.readings, packet.sensor_statuses or {}, packet.timestamp
     )
+
+    # STEP 5b — Assign confidence scores
+    enriched_readings = assign_confidence_scores(
+        enriched_readings, packet.sensor_statuses or {}, packet.timestamp
+    )
+
+    # STEP 5c — Insert readings with imputation data
+    readings_stored = insert_telemetry_readings(
+        db, packet_id, packet.victim_id, packet.timestamp, enriched_readings
+    )
+
+    # STEP 5d — Update the KNN cache
+    update_recent_readings_cache(packet.victim_id, packet.readings, packet.timestamp)
 
     # STEP 6 — Update victim status
     upsert_victim_status(

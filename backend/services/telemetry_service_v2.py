@@ -65,19 +65,21 @@ def insert_telemetry_readings(
     packet_id: int,
     victim_id: str,
     timestamp: str,
-    readings: dict,
+    enriched_readings: dict,
 ) -> int:
-    """Inserts one telemetry_readings row per sensor in the packet. Sensors with
-    None values are stored with raw_value=NULL and raw_value_present=0. This
-    preserves the distinction between a sensor that returned zero versus a sensor
-    that failed to report. The imputation columns are left NULL here and filled by
-    the imputation pipeline in phase M4."""
+    """Inserts one telemetry_readings row per sensor in the packet. Each row stores
+    both the raw value (if the sensor reported) and the imputed value with its method
+    and confidence score (set by the imputation and confidence scoring pipeline).
+    Sensors with no raw value have raw_value=NULL and raw_value_present=0."""
 
     rows_inserted = 0
 
-    for sensor_type_id, value in readings.items():
-        raw_value_present = 1 if value is not None else 0
-        raw_value = value if value is not None else None
+    for sensor_type_id, reading_dict in enriched_readings.items():
+        raw_value            = reading_dict.get("raw_value")
+        raw_value_present    = 1 if raw_value is not None else 0
+        imputed_value        = reading_dict.get("imputed_value")
+        imputation_method    = reading_dict.get("imputation_method")
+        imputation_confidence = reading_dict.get("imputation_confidence")
 
         db.execute(
             text(
@@ -88,15 +90,19 @@ def insert_telemetry_readings(
                 "deviation_score, sensor_reliability) "
                 "VALUES "
                 "(:packet_id, :victim_id, :sensor_type_id, :timestamp, :raw_value, "
-                ":raw_value_present, NULL, NULL, NULL, 0, 0, NULL, 1.0)"
+                ":raw_value_present, :imputed_value, :imputation_method, "
+                ":imputation_confidence, 0, 0, NULL, 1.0)"
             ),
             {
-                "packet_id":         packet_id,
-                "victim_id":         victim_id,
-                "sensor_type_id":    sensor_type_id,
-                "timestamp":         timestamp,
-                "raw_value":         raw_value,
-                "raw_value_present": raw_value_present,
+                "packet_id":             packet_id,
+                "victim_id":             victim_id,
+                "sensor_type_id":        sensor_type_id,
+                "timestamp":             timestamp,
+                "raw_value":             raw_value,
+                "raw_value_present":     raw_value_present,
+                "imputed_value":         imputed_value,
+                "imputation_method":     imputation_method,
+                "imputation_confidence": imputation_confidence,
             },
         )
         rows_inserted += 1

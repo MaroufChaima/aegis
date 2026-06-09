@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas.telemetry import TelemetryIn
-from services.preprocessing import validate_ranges, deduplicate, tag_signal_quality
+from services.preprocessing_legacy import validate_ranges, deduplicate, tag_signal_quality
 from services.telemetry_service import insert_telemetry
 from services.device_service import upsert_device
 from services.alert_service import create_alert

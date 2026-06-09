@@ -1,3 +1,5 @@
+# LEGACY: Original flat preprocessing module. Preserved for the legacy /api/ingest router.
+# New WBAN pipeline uses services/preprocessing/ package instead.
 """
 Preprocessing pipeline functions applied to every incoming telemetry packet
 before it is written to the database.
