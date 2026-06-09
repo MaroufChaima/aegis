@@ -33,6 +33,7 @@ from services.victim_service import victim_exists, get_victim_profile_for_pipeli
 from services.preprocessing.imputation_service import impute_missing_readings, update_recent_readings_cache
 from services.preprocessing.confidence_scorer import assign_confidence_scores, compute_packet_confidence
 from services.preprocessing.packet_validator import validate_reading_ranges
+from services.victim_state_service import upsert_victim_current_state
 
 router = APIRouter()
 
@@ -125,14 +126,6 @@ async def ingest_coordinator_packet(
     # STEP 5d — Update the KNN cache
     update_recent_readings_cache(packet.victim_id, packet.readings, packet.timestamp)
 
-    # STEP 6 — Update victim status
-    upsert_victim_status(
-        db,
-        packet.victim_id,
-        packet.uav_relay_id or "UAV-UNKNOWN",
-        packet.timestamp,
-    )
-
     # STEP 6b — Load victim profile
     victim_profile = get_victim_profile_for_pipeline(db, packet.victim_id)
 
@@ -154,6 +147,23 @@ async def ingest_coordinator_packet(
     for alert_dict in ai_result.get("alerts", []):
         alert_dict["packet_id"] = packet_id
         create_alert(db, alert_dict)
+
+    # STEP 6g — Upsert victim current state (WBAN state layer)
+    packet_dict_for_state = {
+        'timestamp': packet.timestamp,
+        'uav_relay_id': packet.uav_relay_id,
+        'packet_completeness': packet.packet_completeness,
+        'packet_quality': packet.packet_quality,
+        'rssi': packet.rssi,
+    }
+    upsert_victim_current_state(
+        db=db,
+        victim_id=packet.victim_id,
+        packet_id=packet_id,
+        packet_dict=packet_dict_for_state,
+        flat_readings=flat_readings,
+        ai_result=ai_result,
+    )
 
     # STEP 7 — Print success log
     print(
