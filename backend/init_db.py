@@ -14,7 +14,7 @@ def init_db():
     print("Database initialized. Tables created or verified:")
     for table_name in Base.metadata.tables.keys():
         print(f"  - {table_name}")
-    print("init_db complete.")
+    print('Tables include new WBAN current-state table: victim_current_state')
 
 
 if __name__ == "__main__":

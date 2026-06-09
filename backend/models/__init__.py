@@ -13,5 +13,7 @@ from models.victim_sensor import VictimSensor                       # New WBAN a
 from models.coordinator_packet import CoordinatorPacket             # New WBAN architecture: depends on Victim
 from models.telemetry_reading import TelemetryReading               # New WBAN architecture: depends on CoordinatorPacket, Victim, SensorType
 from models.alert import Alert                                      # Alert model: keep existing import
+# WBAN current-state table: single row per victim, upserted on every packet
+from models.victim_current_state import VictimCurrentState
 from models.device import Device                                    # LEGACY: keep until M7 cleanup phase
 from models.telemetry import Telemetry                              # LEGACY: keep until M7 cleanup phase
