@@ -18,6 +18,8 @@ class VictimStateOut(BaseModel):
     temperature: Optional[float] = None
     spo2: Optional[float] = None
     blood_pressure_systolic: Optional[float] = None
+    blood_pressure_diastolic: Optional[float] = None
+    glucose: Optional[float] = None
     respiratory_rate: Optional[float] = None
     battery: Optional[float] = None
     gps_lat: Optional[float] = None

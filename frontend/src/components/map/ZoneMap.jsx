@@ -27,7 +27,7 @@ export default function ZoneMap({ victims = [] }) {
       />
 
       {victims
-        .filter((v) => v.latitude != null && v.longitude != null)
+        .filter((v) => v.gps_lat != null && v.gps_lon != null)
         .map((victim) => {
           const color = getPriorityColor(
             victim.status === 'offline' ? 'offline' : victim.priority_class
@@ -35,8 +35,8 @@ export default function ZoneMap({ victims = [] }) {
 
           return (
             <CircleMarker
-              key={victim.device_id}
-              center={[victim.latitude, victim.longitude]}
+              key={victim.victim_id}
+              center={[victim.gps_lat, victim.gps_lon]}
               radius={10}
               pathOptions={{
                 color: color,
@@ -47,7 +47,7 @@ export default function ZoneMap({ victims = [] }) {
             >
               <Popup>
                 <div className="text-sm space-y-1 min-w-[140px]">
-                  <p className="font-semibold text-gray-800">{victim.device_id}</p>
+                  <p className="font-semibold text-gray-800">{victim.name || victim.victim_id}</p>
                   <p>
                     Priority:{' '}
                     <span style={{ color }} className="font-bold">

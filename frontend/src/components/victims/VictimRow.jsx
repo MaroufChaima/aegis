@@ -56,7 +56,7 @@ export default function VictimRow({ victim, onClick }) {
 
       {/* Device ID + optional profile badge */}
       <td className="px-4 py-3 font-mono font-medium">
-        {victim.device_id}
+        {victim.name || victim.victim_id}
         {victim.risk_category && (
           <span
             className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ml-1 ${profileColors.bg} ${profileColors.text} ${profileColors.border}`}
@@ -72,7 +72,7 @@ export default function VictimRow({ victim, onClick }) {
           ? 'text-red-400 font-semibold'
           : ''
       }`}>
-        {victim.heart_rate != null ? `${victim.heart_rate} bpm` : '—'}
+        {victim.heart_rate != null ? `${victim.heart_rate.toFixed(1)} bpm` : '—'}
       </td>
 
       {/* Temperature — red if elevated */}
@@ -81,12 +81,12 @@ export default function VictimRow({ victim, onClick }) {
           ? 'text-red-400 font-semibold'
           : ''
       }`}>
-        {victim.temperature != null ? `${victim.temperature} °C` : '—'}
+        {victim.temperature != null ? `${victim.temperature.toFixed(1)} °C` : '—'}
       </td>
 
       {/* SOS — red pill when active */}
       <td className="px-4 py-3">
-        {victim.sos_signal ? (
+        {victim.sos_active ? (
           <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white animate-pulse">
             SOS
           </span>

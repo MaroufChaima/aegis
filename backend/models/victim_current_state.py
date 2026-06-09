@@ -15,6 +15,8 @@ class VictimCurrentState(Base):
     temperature = Column(Float, nullable=True, comment='latest temperature reading including imputed values')
     spo2 = Column(Float, nullable=True, comment='latest SpO2 reading')
     blood_pressure_systolic = Column(Float, nullable=True)
+    blood_pressure_diastolic = Column(Float, nullable=True)
+    glucose = Column(Float, nullable=True, comment='latest glucose reading for diabetic victims')
     respiratory_rate = Column(Float, nullable=True)
     battery = Column(Float, nullable=True, comment='coordinator node battery percentage')
     gps_lat = Column(Float, nullable=True, comment='latest GPS latitude')

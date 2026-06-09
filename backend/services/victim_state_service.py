@@ -23,6 +23,8 @@ def upsert_victim_current_state(
         'temperature': flat_readings.get('temperature'),
         'spo2': flat_readings.get('spo2'),
         'blood_pressure_systolic': flat_readings.get('blood_pressure_systolic'),
+        'blood_pressure_diastolic': flat_readings.get('blood_pressure_diastolic'),
+        'glucose': flat_readings.get('glucose'),
         'respiratory_rate': flat_readings.get('respiratory_rate'),
         'battery': flat_readings.get('battery'),
         'gps_lat': flat_readings.get('gps_lat'),
@@ -42,12 +44,14 @@ def upsert_victim_current_state(
             """
             INSERT OR REPLACE INTO victim_current_state
             (victim_id, severity_score, priority_class, is_anomaly, heart_rate,
-             temperature, spo2, blood_pressure_systolic, respiratory_rate, battery,
+             temperature, spo2, blood_pressure_systolic, blood_pressure_diastolic,
+             glucose, respiratory_rate, battery,
              gps_lat, gps_lon, rssi, uav_relay_id, sos_active, packet_completeness,
              last_packet_quality, status, last_seen, last_packet_id)
             VALUES
             (:victim_id, :severity_score, :priority_class, :is_anomaly, :heart_rate,
-             :temperature, :spo2, :blood_pressure_systolic, :respiratory_rate, :battery,
+             :temperature, :spo2, :blood_pressure_systolic, :blood_pressure_diastolic,
+             :glucose, :respiratory_rate, :battery,
              :gps_lat, :gps_lon, :rssi, :uav_relay_id, :sos_active, :packet_completeness,
              :last_packet_quality, :status, :last_seen, :last_packet_id)
             """

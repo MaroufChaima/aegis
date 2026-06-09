@@ -23,6 +23,7 @@ class CoordinatorPacketIn(BaseModel):
     snr:                    Optional[float] = None
     readings:               Dict[str, Optional[float]]  # keys are sensor_type_ids, values are floats or None if sensor failed
     sensor_statuses:        Optional[Dict[str, str]] = None  # keys are sensor_type_ids, values are active | disconnected | damaged | battery_depleted | degraded
+    sensor_batteries:       Optional[Dict[str, float]] = None  # per-wearable battery percentage from simulator
     packet_quality:         Optional[str] = None         # good | degraded | poor
 
     @field_validator("packet_completeness")

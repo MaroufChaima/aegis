@@ -72,7 +72,7 @@ export default function AlertRow({ alert }) {
             {alert.severity}
           </span>
           <span className="text-gray-500 text-xs">·</span>
-          <span className="text-gray-400 text-xs font-mono">{alert.device_id}</span>
+          <span className="text-gray-400 text-xs font-mono">{alert.victim_id || alert.device_id}</span>
           <span className="text-gray-500 text-xs">·</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${style.badge}`}>
             {alert.alert_type?.replace(/_/g, ' ')}

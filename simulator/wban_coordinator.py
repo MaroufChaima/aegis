@@ -82,6 +82,10 @@ class WBANCoordinator:
             sensor.sensor_type_id: sensor.status_string for sensor in self.sensors
         }
 
+        sensor_batteries = {
+            sensor.sensor_type_id: round(sensor.battery, 1) for sensor in self.sensors
+        }
+
         return {
             "victim_id":             self.victim_id,
             "coordinator_id":        self.coordinator_id,
@@ -94,5 +98,6 @@ class WBANCoordinator:
             "snr":                   snr,
             "readings":              readings,
             "sensor_statuses":       sensor_statuses,
+            "sensor_batteries":      sensor_batteries,
             "packet_quality":        packet_quality,
         }

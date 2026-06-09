@@ -6,6 +6,28 @@ import { WS_URL } from '../utils/constants'
 
 const WebSocketContext = createContext(null)
 
+/** Identity fields from REST — never overwrite with null from WS telemetry payloads. */
+const PRESERVE_IF_NULL = [
+  'name', 'age', 'gender', 'risk_category', 'medical_conditions',
+  'is_athlete', 'pregnancy_status',
+]
+
+function mergeVictimUpdate(existing, payload) {
+  const merged = { ...existing, ...payload }
+  for (const field of PRESERVE_IF_NULL) {
+    if ((payload[field] == null || payload[field] === '') && existing[field] != null) {
+      merged[field] = existing[field]
+    }
+  }
+  if (payload.sensor_statuses) {
+    merged.sensor_statuses = { ...existing.sensor_statuses, ...payload.sensor_statuses }
+  }
+  if (payload.sensor_batteries) {
+    merged.sensor_batteries = { ...existing.sensor_batteries, ...payload.sensor_batteries }
+  }
+  return merged
+}
+
 /**
  * WebSocketProvider — connects to the backend WebSocket and maintains
  * the live state of victims, alerts, and UAVs for the entire dashboard.
@@ -45,10 +67,10 @@ export function WebSocketProvider({ children }) {
 
     if (type === 'telemetry_update') {
       setVictims((prev) => {
-        const idx = prev.findIndex((v) => v.device_id === payload.device_id)
+        const idx = prev.findIndex((v) => v.victim_id === payload.victim_id)
         if (idx === -1) return [...prev, payload]
         const updated = [...prev]
-        updated[idx] = { ...updated[idx], ...payload }
+        updated[idx] = mergeVictimUpdate(updated[idx], payload)
         return updated
       })
       return
