@@ -38,7 +38,7 @@ export default function VictimTable({ victims = [], onRowClick }) {
           )}
           {sorted.map((victim) => (
             <VictimRow
-              key={victim.device_id}
+              key={victim.victim_id}
               victim={victim}
               onClick={onRowClick ? () => onRowClick(victim) : undefined}
             />

@@ -34,6 +34,7 @@ from services.preprocessing.imputation_service import impute_missing_readings, u
 from services.preprocessing.confidence_scorer import assign_confidence_scores, compute_packet_confidence
 from services.preprocessing.packet_validator import validate_reading_ranges
 from services.victim_state_service import upsert_victim_current_state
+from websocket_manager import manager as ws_manager
 
 router = APIRouter()
 
@@ -173,7 +174,55 @@ async def ingest_coordinator_packet(
         f"alerts={len(ai_result['alerts'])}"
     )
 
-    # STEP 8 — Return response
+    # STEP 8 — Broadcast telemetry update to all connected WebSocket clients
+    ws_payload = {
+        'type': 'telemetry_update',
+        'timestamp': packet.timestamp,
+        'payload': {
+            'victim_id': packet.victim_id,
+            'severity_score': ai_result.get('severity_score', 0),
+            'priority_class': ai_result.get('priority_class', 'P3'),
+            'is_anomaly': ai_result.get('is_anomaly', False),
+            'heart_rate': flat_readings.get('heart_rate'),
+            'temperature': flat_readings.get('temperature'),
+            'spo2': flat_readings.get('spo2'),
+            'battery': flat_readings.get('battery'),
+            'gps_lat': flat_readings.get('gps_lat'),
+            'gps_lon': flat_readings.get('gps_lon'),
+            'rssi': packet.rssi,
+            'uav_relay_id': packet.uav_relay_id,
+            'packet_completeness': packet.packet_completeness,
+            'status': 'sos' if flat_readings.get('sos_signal', 0) else 'online',
+            'last_seen': packet.timestamp,
+            'risk_category': None,
+        }
+    }
+    import asyncio
+    try:
+        asyncio.create_task(ws_manager.broadcast(ws_payload))
+    except RuntimeError:
+        pass  # No event loop running outside async context — safe to skip
+
+    # Broadcast each generated alert separately
+    for alert in ai_result.get('alerts', []):
+        alert_payload = {
+            'type': 'alert',
+            'timestamp': packet.timestamp,
+            'payload': {
+                'victim_id': packet.victim_id,
+                'alert_type': alert.get('alert_type'),
+                'severity': alert.get('severity'),
+                'message': alert.get('message'),
+                'ai_confidence': alert.get('ai_confidence'),
+                'acknowledged': False,
+            }
+        }
+        try:
+            asyncio.create_task(ws_manager.broadcast(alert_payload))
+        except RuntimeError:
+            pass
+
+    # STEP 9 — Return response
     return CoordinatorPacketOut(
         status="ok",
         victim_id=packet.victim_id,
