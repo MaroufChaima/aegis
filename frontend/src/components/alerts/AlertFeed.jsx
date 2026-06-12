@@ -7,11 +7,18 @@ import AlertRow from './AlertRow'
  * readable regardless of how many alerts the context holds. Actual
  * capping to 100 is handled in WebSocketContext.
  *
- * @param {{ alerts: Array }} props
- *   alerts — array of alert objects from WebSocketContext
+ * @param {{ alerts: Array, victims: Array }} props
+ *   alerts  — array of alert objects from WebSocketContext
+ *   victims — victim list used to resolve victim_id → name
  */
-export default function AlertFeed({ alerts = [] }) {
+export default function AlertFeed({ alerts = [], victims = [] }) {
   const visible = alerts.slice(0, 15)
+
+  const nameById = Object.fromEntries(
+    victims
+      .filter((v) => v.victim_id)
+      .map((v) => [v.victim_id, v.name || v.victim_id]),
+  )
 
   return (
     <section>
@@ -31,7 +38,11 @@ export default function AlertFeed({ alerts = [] }) {
           </p>
         ) : (
           visible.map((alert, i) => (
-            <AlertRow key={alert.id ?? i} alert={alert} />
+            <AlertRow
+              key={alert.id ?? i}
+              alert={alert}
+              victimName={nameById[alert.victim_id || alert.device_id]}
+            />
           ))
         )}
       </div>

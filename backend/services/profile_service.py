@@ -43,7 +43,11 @@ def get_victim_with_profile(db: Session, victim_id: str) -> dict | None:
             result[field] = None
 
     sensor_rows = db.execute(
-        text("SELECT sensor_type_id FROM victim_sensors WHERE victim_id = :victim_id AND is_active = 1"),
+        text(
+            "SELECT DISTINCT sensor_type_id FROM victim_sensors "
+            "WHERE victim_id = :victim_id AND is_active = 1 "
+            "ORDER BY sensor_type_id"
+        ),
         {"victim_id": victim_id},
     ).fetchall()
 

@@ -191,7 +191,7 @@ export default function SimulationPage() {
             Emergency Scenarios
           </h3>
           <span className="text-xs text-gray-500">
-            Applied on the simulator's next tick (~{15}s delay)
+            Applied on the simulator&apos;s next tick (~5–80s depending on tick progress)
           </span>
         </div>
 

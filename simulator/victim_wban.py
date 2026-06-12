@@ -27,6 +27,7 @@ class VictimWBAN:
         self.name          = name
         self.risk_category = risk_category
         self.uav_relay_id  = uav_relay_id
+        self.sos_active    = False
 
         self.sensors = [
             WearableSensor(
@@ -48,7 +49,11 @@ class VictimWBAN:
         self.coordinator.tick()
 
     def build_packet(self) -> dict:
-        return self.coordinator.build_packet()
+        return self.coordinator.build_packet(sos_active=self.sos_active)
+
+    @property
+    def profile(self):
+        return self.coordinator.profile
 
     @property
     def victim_summary(self) -> str:

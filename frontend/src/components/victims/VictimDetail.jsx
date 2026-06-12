@@ -4,11 +4,15 @@ import { PROFILE_COLORS } from '../../utils/constants'
 import {
   VITAL_DEFS,
   getOrderedVitalKeys,
-  getPriorityVitalKeys,
-  getAwarenessNote,
 } from '../../utils/vitalPriority'
+import {
+  isOutsidePersonalRange,
+  getPersonalRangeHint,
+} from '../../utils/personalThresholds'
 import SensorStatusPanel from './SensorStatusPanel'
 import AlertRow from '../alerts/AlertRow'
+import ProfileRangesModal from './ProfileRangesModal'
+import VictimHistoryModal from './VictimHistoryModal'
 import { fetchVictimProfile } from '../../api/profiles'
 
 function formatTime(iso) {
@@ -32,6 +36,40 @@ function parseConditions(medicalConditions) {
  */
 export default function VictimDetail({ victim, alerts = [], onClose }) {
   const [victimProfile, setVictimProfile] = useState(null)
+  const [showProfileRanges, setShowProfileRanges] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [history, setHistory] = useState([])
+
+  useEffect(() => {
+    setHistory([])
+    setShowHistory(false)
+  }, [victim?.victim_id])
+
+  useEffect(() => {
+    if (!victim?.victim_id || !victim?.last_seen) return
+    const snap = {
+      timestamp: victim.last_seen,
+      heart_rate: victim.heart_rate,
+      temperature: victim.temperature,
+      spo2: victim.spo2,
+      respiratory_rate: victim.respiratory_rate,
+      severity_score: victim.severity_score,
+      priority_class: victim.priority_class,
+    }
+    setHistory((prev) => {
+      if (prev[0]?.timestamp === snap.timestamp) return prev
+      return [snap, ...prev].slice(0, 50)
+    })
+  }, [
+    victim?.victim_id,
+    victim?.last_seen,
+    victim?.heart_rate,
+    victim?.temperature,
+    victim?.spo2,
+    victim?.respiratory_rate,
+    victim?.severity_score,
+    victim?.priority_class,
+  ])
 
   useEffect(() => {
     if (!victim) return
@@ -58,11 +96,10 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
   const color = getPriorityColor(priority)
   const displayCategory = victim.risk_category || victimProfile?.risk_category
   const profileColors = PROFILE_COLORS[displayCategory] || PROFILE_COLORS.unknown
-  const awarenessNote = getAwarenessNote(displayCategory)
   const assignedSensors = victimProfile?.assigned_sensors || []
   const orderedVitalKeys = getOrderedVitalKeys(displayCategory, assignedSensors)
-  const priorityVitalKeys = getPriorityVitalKeys(displayCategory, assignedSensors)
   const conditions = parseConditions(victim.medical_conditions)
+  const hasPersonalProfile = victimProfile && displayCategory && displayCategory !== 'healthy'
 
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4 max-h-[85vh] overflow-y-auto">
@@ -108,15 +145,26 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
             Severity {victim.severity_score ?? 0} · Last seen {formatTime(victim.last_seen)}
           </p>
         </div>
-        {onClose && (
+        <div className="flex items-center gap-2 flex-shrink-0">
           <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-sm leading-none flex-shrink-0"
-            aria-label="Close panel"
+            type="button"
+            onClick={() => setShowHistory(true)}
+            className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:text-white hover:border-gray-500"
+            aria-label="View vital history"
           >
-            ✕
+            History
           </button>
-        )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="text-gray-400 hover:text-white text-sm leading-none"
+              aria-label="Close panel"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Alerts — first actionable section */}
@@ -136,7 +184,11 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
             </p>
           ) : (
             victimAlerts.slice(0, 8).map((alert, i) => (
-              <AlertRow key={alert.id ?? `${alert.timestamp}-${i}`} alert={alert} />
+              <AlertRow
+                key={alert.id ?? `${alert.timestamp}-${i}`}
+                alert={alert}
+                victimName={victim.name || victim.victim_id}
+              />
             ))
           )}
         </div>
@@ -144,38 +196,55 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
 
       {/* Vital signs — physiological only */}
       <section>
-        <h3 className="text-sm font-semibold text-gray-200 mb-2">Vital Signs</h3>
-        {awarenessNote && (
-          <p className="text-xs text-amber-200/90 bg-amber-900/30 border border-amber-700/50 rounded px-2 py-1.5 mb-2">
-            {awarenessNote}
-          </p>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h3 className="text-sm font-semibold text-gray-200">Vital Signs</h3>
+          {victimProfile && (
+            <button
+              type="button"
+              onClick={() => setShowProfileRanges(true)}
+              className={`text-xs px-2 py-1 rounded border transition-colors ${
+                hasPersonalProfile
+                  ? 'border-blue-500/60 text-blue-300 hover:bg-blue-900/30'
+                  : 'border-gray-600 text-gray-400 hover:bg-gray-700/50'
+              }`}
+            >
+              View normal ranges
+            </button>
+          )}
+        </div>
+        {hasPersonalProfile && (
+          <button
+            type="button"
+            onClick={() => setShowProfileRanges(true)}
+            className="w-full text-left text-xs text-blue-200/90 bg-blue-900/25 border border-blue-600/40 rounded px-2 py-1.5 mb-2 hover:bg-blue-900/40 transition-colors"
+          >
+            This victim has a <span className="font-medium">{displayCategory}</span> profile.
+            Tap to see their personalized normal ranges before interpreting vitals.
+          </button>
         )}
         <div className="grid grid-cols-2 gap-2">
           {orderedVitalKeys.map((key) => {
             const def = VITAL_DEFS[key]
             const value = victim[key]
-            const isPriority = priorityVitalKeys.includes(key)
+            const outOfRange = value != null && isOutsidePersonalRange(
+              key, value, victimProfile, def.isAlert,
+            )
+            const rangeHint = getPersonalRangeHint(key, victimProfile)
             return (
               <div
                 key={key}
-                className={`bg-gray-700/60 rounded p-3 border ${
-                  isPriority && displayCategory && displayCategory !== 'healthy'
-                    ? 'border-amber-600/40'
-                    : 'border-transparent'
-                }`}
+                className="bg-gray-700/60 rounded p-3 border border-transparent"
               >
-                <p className="text-xs text-gray-400 mb-0.5">
-                  {def.label}
-                  {isPriority && displayCategory && displayCategory !== 'healthy' && (
-                    <span className="ml-1 text-amber-400" title="Priority vital for this profile">★</span>
-                  )}
-                </p>
+                <p className="text-xs text-gray-400 mb-0.5">{def.label}</p>
                 <p className={`text-lg font-semibold ${
-                  value != null && def.isAlert(value) ? 'text-red-400' : 'text-white'
+                  outOfRange ? 'text-red-400' : 'text-white'
                 }`}>
                   {value != null ? def.format(value) : '—'}
                   <span className="text-xs font-normal text-gray-400 ml-1">{def.unit}</span>
                 </p>
+                {rangeHint && (
+                  <p className="text-[10px] text-gray-500 mt-0.5">{rangeHint}</p>
+                )}
               </div>
             )
           })}
@@ -199,22 +268,19 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
         />
       </section>
 
-      {victimProfile && (
-        <section className="p-3 bg-gray-700/40 rounded border border-gray-600">
-          <h3 className="text-sm font-semibold text-gray-200 mb-2">Physiological Profile</h3>
-          <div className="grid grid-cols-2 gap-1 text-xs text-gray-300">
-            <span>HR normal:</span>
-            <span className="font-medium">{victimProfile.hr_normal_min}–{victimProfile.hr_normal_max} bpm</span>
-            <span>Temp normal:</span>
-            <span className="font-medium">{victimProfile.temp_normal_min}–{victimProfile.temp_normal_max} °C</span>
-            {victimProfile.glucose_normal_min && (
-              <>
-                <span>Glucose range:</span>
-                <span className="font-medium">{victimProfile.glucose_normal_min}–{victimProfile.glucose_normal_max} mg/dL</span>
-              </>
-            )}
-          </div>
-        </section>
+      {showProfileRanges && victimProfile && (
+        <ProfileRangesModal
+          profile={victimProfile}
+          onClose={() => setShowProfileRanges(false)}
+        />
+      )}
+
+      {showHistory && (
+        <VictimHistoryModal
+          victim={victim}
+          history={history}
+          onClose={() => setShowHistory(false)}
+        />
       )}
     </div>
   )

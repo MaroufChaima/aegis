@@ -53,8 +53,10 @@ function formatTime(iso) {
  *   alert.message    — human-readable description
  *   alert.timestamp  — ISO 8601 string
  */
-export default function AlertRow({ alert }) {
+export default function AlertRow({ alert, victimName }) {
   const style = SEVERITY[alert.severity] ?? DEFAULT_SEVERITY
+  const victimId = alert.victim_id || alert.device_id
+  const displayName = victimName || victimId
 
   return (
     <div className={`flex items-start gap-3 px-4 py-3 border-l-2 ${style.border} bg-gray-800/60`}>
@@ -72,7 +74,13 @@ export default function AlertRow({ alert }) {
             {alert.severity}
           </span>
           <span className="text-gray-500 text-xs">·</span>
-          <span className="text-gray-400 text-xs font-mono">{alert.victim_id || alert.device_id}</span>
+          <span className="text-gray-300 text-xs font-medium">{displayName}</span>
+          {victimName && victimId && (
+            <>
+              <span className="text-gray-500 text-xs">·</span>
+              <span className="text-gray-500 text-xs font-mono">{victimId}</span>
+            </>
+          )}
           <span className="text-gray-500 text-xs">·</span>
           <span className={`text-xs px-1.5 py-0.5 rounded ${style.badge}`}>
             {alert.alert_type?.replace(/_/g, ' ')}

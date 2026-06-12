@@ -28,7 +28,11 @@ export default function OverviewPage() {
 
       {/* Zone map */}
       <div className="h-[480px] rounded-lg overflow-hidden border border-gray-700">
-        <ZoneMap victims={victims} />
+        <ZoneMap
+          victims={victims}
+          selectedVictimId={liveSelectedVictim?.victim_id ?? null}
+          onVictimClick={setSelectedVictim}
+        />
       </div>
 
       {/* Priority table + detail panel side-by-side when a victim is selected */}
@@ -49,7 +53,7 @@ export default function OverviewPage() {
       </div>
 
       {/* Alert feed */}
-      <AlertFeed alerts={alerts} />
+      <AlertFeed alerts={alerts} victims={victims} />
 
     </div>
   )

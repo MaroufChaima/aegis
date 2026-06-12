@@ -20,7 +20,7 @@ export default function VictimTable({ victims = [], onRowClick }) {
         <thead className="text-xs uppercase bg-gray-800 text-gray-400">
           <tr>
             <th className="px-4 py-3">Priority</th>
-            <th className="px-4 py-3">Device ID</th>
+            <th className="px-4 py-3">Victim</th>
             <th className="px-4 py-3">Heart Rate</th>
             <th className="px-4 py-3">Temperature</th>
             <th className="px-4 py-3">SOS</th>

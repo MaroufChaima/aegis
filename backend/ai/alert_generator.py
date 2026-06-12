@@ -159,4 +159,29 @@ def decide_alerts(
             is_personal_alert=True,
         )
 
+    # ALERT 8 — Respiratory rate (personal thresholds)
+    respiratory_rate = readings_dict.get("respiratory_rate")
+    if respiratory_rate is not None and respiratory_rate < thresholds.get("low_rr", 8.0):
+        _emit(
+            alert_type="respiratory_anomaly",
+            severity="critical",
+            message=(
+                f"{victim_id}: Low respiratory rate {respiratory_rate:.1f} br/min below personal "
+                f"threshold {thresholds['low_rr']:.1f}"
+            ),
+            ai_confidence=0.90,
+            is_personal_alert=is_personal,
+        )
+    if respiratory_rate is not None and respiratory_rate > thresholds.get("high_rr", 25.0):
+        _emit(
+            alert_type="respiratory_anomaly",
+            severity="warning",
+            message=(
+                f"{victim_id}: High respiratory rate {respiratory_rate:.1f} br/min above personal "
+                f"threshold {thresholds['high_rr']:.1f}"
+            ),
+            ai_confidence=0.90,
+            is_personal_alert=is_personal,
+        )
+
     return alerts

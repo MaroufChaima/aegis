@@ -54,15 +54,20 @@ export default function VictimRow({ victim, onClick }) {
         </span>
       </td>
 
-      {/* Device ID + optional profile badge */}
-      <td className="px-4 py-3 font-mono font-medium">
-        {victim.name || victim.victim_id}
-        {victim.risk_category && (
-          <span
-            className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ml-1 ${profileColors.bg} ${profileColors.text} ${profileColors.border}`}
-          >
-            {victim.risk_category}
-          </span>
+      {/* Name + victim ID + optional profile badge */}
+      <td className="px-4 py-3">
+        <div className="font-medium text-white">
+          {victim.name || victim.victim_id}
+          {victim.risk_category && (
+            <span
+              className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium border ml-1 ${profileColors.bg} ${profileColors.text} ${profileColors.border}`}
+            >
+              {victim.risk_category}
+            </span>
+          )}
+        </div>
+        {victim.name && victim.victim_id && (
+          <div className="text-xs text-gray-400 font-mono mt-0.5">{victim.victim_id}</div>
         )}
       </td>
 

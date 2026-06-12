@@ -52,8 +52,11 @@ class WBANCoordinator:
                 readings[sensor.sensor_type_id] = None
         return readings
 
-    def build_packet(self) -> dict:
+    def build_packet(self, sos_active: bool = False) -> dict:
         readings = self.collect_readings()
+
+        if sos_active:
+            readings["sos_signal"] = 1.0
 
         sensor_count_expected = len(self.sensors)
         sensor_count_received = sum(1 for v in readings.values() if v is not None)

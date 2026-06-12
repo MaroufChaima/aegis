@@ -1,20 +1,40 @@
 """
 Main WBAN simulator for AEGIS. Run with: python simulator_wban.py. This replaces
 simulator_legacy.py. Posts coordinator packets to the backend API every 5 seconds
-for all 15 simulated victims.
+for all 15 simulated victims. Reads simulator_state.json for pause/scenario control.
 """
 
+import pathlib
+import sys
 import requests
 import time
 import json
 import datetime
-import random
 
 from victim_factory import create_all_victims
+from scenarios_wban import SCENARIO_REGISTRY_WBAN, apply_tick_effects
 
-API_URL                 = "http://localhost:8000/api/v2/ingest"
-EMIT_INTERVAL_SECONDS   = 5
-UAV_EMIT_INTERVAL_TICKS = 2
+API_URL               = "http://localhost:8000/api/v2/ingest"
+EMIT_INTERVAL_SECONDS = 5
+STATE_FILE            = pathlib.Path(__file__).parent.parent / "simulator_state.json"
+_DEFAULT_STATE        = {"running": True, "scenario": None}
+
+
+def _read_state() -> dict:
+    try:
+        return json.loads(STATE_FILE.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return dict(_DEFAULT_STATE)
+    except Exception as exc:
+        print(f"  WARN: Could not read state file ({exc}); using defaults")
+        return dict(_DEFAULT_STATE)
+
+
+def _write_state(state: dict) -> None:
+    try:
+        STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"  WARN: Could not write state file: {exc}")
 
 
 def post_packet(packet: dict) -> bool:
@@ -40,7 +60,12 @@ def post_packet(packet: dict) -> bool:
 
 
 def run_simulator():
-    print("AEGIS WBAN Simulator starting...")
+    print("AEGIS WBAN Simulator starting...", flush=True)
+    print(f"  State file: {STATE_FILE.resolve()}", flush=True)
+    print(f"  Scenarios:  {', '.join(sorted(SCENARIO_REGISTRY_WBAN))}", flush=True)
+    if not STATE_FILE.exists():
+        _write_state(_DEFAULT_STATE)
+
     victims = create_all_victims()
     print(f"Created {len(victims)} victims")
 
@@ -51,19 +76,44 @@ def run_simulator():
             f"\n--- Tick {tick_count} at {datetime.datetime.utcnow().isoformat()} ---"
         )
 
+        state = _read_state()
+
+        if not state.get("running", True):
+            print("  PAUSED — waiting for resume…")
+            time.sleep(EMIT_INTERVAL_SECONDS)
+            continue
+
+        scenario_name = state.get("scenario")
+        if scenario_name:
+            handler = SCENARIO_REGISTRY_WBAN.get(scenario_name)
+            try:
+                if handler:
+                    result = handler(victims)
+                    print(f"[SCENARIO] {scenario_name} applied -> {result}", flush=True)
+                else:
+                    print(f"[SCENARIO] Unknown scenario: {scenario_name}", flush=True)
+            except Exception as exc:
+                print(f"[SCENARIO] {scenario_name} failed: {exc}", flush=True)
+            finally:
+                state["scenario"] = None
+                _write_state(state)
+
+        apply_tick_effects(victims)
+
         for victim in victims:
             victim.tick()
             packet = victim.build_packet()
             post_packet(packet)
-
-        if tick_count % 300 == 0 and tick_count > 0:
-            victim = random.choice(victims)
-            random.choice(victim.sensors).failure_probability_per_tick = 0.95
-            print(f"[SCENARIO] Forcing sensor failure on {victim.victim_summary}")
 
         tick_count += 1
         time.sleep(EMIT_INTERVAL_SECONDS)
 
 
 if __name__ == "__main__":
+    # Windows consoles default to cp1252; force UTF-8-safe ASCII logging.
+    if hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
     run_simulator()

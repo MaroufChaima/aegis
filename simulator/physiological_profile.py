@@ -55,6 +55,13 @@ class PhysiologicalProfile:
         return max(min_val, min(max_val, value))
 
     def generate_reading(self, sensor_type_id: str):
+        overrides = getattr(self, "_reading_overrides", None)
+        if overrides and sensor_type_id in overrides:
+            return overrides[sensor_type_id]
+
+        if sensor_type_id == "rssi" and getattr(self, "_rssi_override", None) is not None:
+            return self._rssi_override
+
         if sensor_type_id == "heart_rate":
             raw = np.random.normal(
                 self.hr_baseline,
