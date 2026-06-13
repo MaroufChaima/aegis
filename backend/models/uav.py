@@ -12,12 +12,15 @@ class UAVPosition(Base):
     __tablename__ = "uav_positions"
 
     id                = Column(Integer, primary_key=True, autoincrement=True)
-    uav_id            = Column(Text, unique=True, nullable=False)  # e.g. "UAV-01"
+    uav_id            = Column(Text, unique=True, nullable=False)  # e.g. "Algiers-UAV-01"
+    name              = Column(Text, nullable=True)
+    home_region       = Column(Text, nullable=True)
+    current_region    = Column(Text, nullable=True)
     timestamp         = Column(Text)               # ISO 8601 as TEXT; updated each tick
     latitude          = Column(Float)
     longitude         = Column(Float)
     altitude          = Column(Float)              # metres above ground
     battery           = Column(Integer)            # 0–100 percent
-    status            = Column(Text, default="active")  # active | returning | offline
+    status            = Column(Text, default="standby")  # standby | active | inactive | offline
     coverage_radius   = Column(Float, default=800.0)    # metres
     connected_devices = Column(Integer, default=0)      # devices currently relaying through this UAV

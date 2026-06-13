@@ -1,18 +1,5 @@
 """
-Simulation control router.
-
-Exposes four endpoints that let the dashboard control the running simulator
-by reading/writing the shared simulator_state.json file at the repository root.
-
-Endpoints:
-    GET  /api/simulation/status    — return current running state and active scenario
-    POST /api/simulation/pause     — write {"running": false} → simulator stops emitting
-    POST /api/simulation/resume    — write {"running": true}  → simulator resumes
-    POST /api/simulation/scenario  — write scenario name → simulator applies it next tick
-
-The state file lives at <repo_root>/simulator_state.json.  Both the simulator
-(simulator/simulator.py) and this router resolve the path relative to their own
-__file__ location so neither depends on the current working directory.
+Simulation control router — reads/writes simulator_state.json at repo root.
 """
 
 import json
@@ -22,62 +9,43 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from data.demo_config import REGIONS, DEFAULT_REGION
+
 router = APIRouter(prefix="/api/simulation", tags=["simulation"])
 
-# Resolve repo root regardless of where uvicorn was launched from
 _STATE_FILE = pathlib.Path(__file__).parent.parent.parent / "simulator_state.json"
 
 _VALID_SCENARIOS = {
-    "sos_wave",
+    "critical_vitals_wave",
     "mass_casualty",
     "uav_failure",
     "gradual_deterioration",
     "network_partition",
 }
 
-_DEFAULT_STATE = {"running": True, "scenario": None}
+_DEFAULT_STATE = {"running": True, "scenario": None, "region": DEFAULT_REGION, "emergency_mode": False}
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def _read_state() -> dict:
-    """Read and parse simulator_state.json; return defaults on any error.
-
-    Returns:
-        Dict with at least the keys ``running`` (bool) and ``scenario`` (str|None).
-    """
     try:
-        return json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        state = json.loads(_STATE_FILE.read_text(encoding="utf-8"))
+        state.setdefault("region", DEFAULT_REGION)
+        state.setdefault("emergency_mode", False)
+        return state
     except Exception:
         return dict(_DEFAULT_STATE)
 
 
 def _write_state(state: dict) -> None:
-    """Persist state dict to simulator_state.json.
-
-    Args:
-        state: Dict to serialise.
-
-    Raises:
-        HTTPException 500: If the file cannot be written.
-    """
     try:
         _STATE_FILE.write_text(json.dumps(state, indent=2), encoding="utf-8")
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Could not write state file: {exc}")
 
 
-# ---------------------------------------------------------------------------
-# Request body
-# ---------------------------------------------------------------------------
-
 class ScenarioRequest(BaseModel):
-    """Body for POST /api/simulation/scenario."""
-
     name: Literal[
-        "sos_wave",
+        "critical_vitals_wave",
         "mass_casualty",
         "uav_failure",
         "gradual_deterioration",
@@ -85,30 +53,28 @@ class ScenarioRequest(BaseModel):
     ]
 
 
-# ---------------------------------------------------------------------------
-# Endpoints
-# ---------------------------------------------------------------------------
+class RegionRequest(BaseModel):
+    region: str
+
+
+class EmergencyRequest(BaseModel):
+    emergency_mode: bool
+
 
 @router.get("/status")
 def get_status():
-    """Return the current simulator running state and pending scenario.
-
-    Returns:
-        JSON with ``running`` (bool), ``scenario`` (str | null).
-    """
-    return _read_state()
+    state = _read_state()
+    region = state.get("region", DEFAULT_REGION)
+    return {
+        **state,
+        "emergency_mode": state.get("emergency_mode", False),
+        "region_label": REGIONS.get(region, {}).get("label", region),
+        "regions": {k: v["label"] for k, v in REGIONS.items()},
+    }
 
 
 @router.post("/pause")
 def pause_simulator():
-    """Write running=false to the state file, causing the simulator to pause.
-
-    The simulator checks this flag at the start of each tick and skips
-    emission while paused.
-
-    Returns:
-        JSON confirmation.
-    """
     state = _read_state()
     state["running"] = False
     _write_state(state)
@@ -117,11 +83,6 @@ def pause_simulator():
 
 @router.post("/resume")
 def resume_simulator():
-    """Write running=true to the state file, resuming the simulator.
-
-    Returns:
-        JSON confirmation.
-    """
     state = _read_state()
     state["running"] = True
     _write_state(state)
@@ -130,19 +91,32 @@ def resume_simulator():
 
 @router.post("/scenario")
 def trigger_scenario(body: ScenarioRequest):
-    """Queue a named scenario for the simulator to apply on its next tick.
-
-    The simulator reads the state file at the start of each tick. If
-    ``scenario`` is non-null, it dispatches to the matching function,
-    then clears the field so the scenario only fires once.
-
-    Args:
-        body: ScenarioRequest with ``name`` field.
-
-    Returns:
-        JSON with ``queued`` scenario name and current ``running`` state.
-    """
     state = _read_state()
     state["scenario"] = body.name
     _write_state(state)
     return {"queued": body.name, "running": state.get("running", True)}
+
+
+@router.post("/region")
+def set_region(body: RegionRequest):
+    if body.region not in REGIONS:
+        raise HTTPException(status_code=422, detail=f"Unknown region: {body.region}")
+    state = _read_state()
+    state["region"] = body.region
+    _write_state(state)
+    return {
+        "region": body.region,
+        "region_label": REGIONS[body.region]["label"],
+        "running": state.get("running", True),
+    }
+
+
+@router.post("/emergency")
+def set_emergency_mode(body: EmergencyRequest):
+    state = _read_state()
+    state["emergency_mode"] = body.emergency_mode
+    _write_state(state)
+    return {
+        "emergency_mode": body.emergency_mode,
+        "region": state.get("region", DEFAULT_REGION),
+    }

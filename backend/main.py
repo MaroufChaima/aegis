@@ -18,6 +18,7 @@ from routers.simulation import router as simulation_router
 from routers.analytics import router as analytics_router
 from routers.profiles import router as profiles_router
 from routers.ingest_v2 import router as ingest_v2_router
+from routers.rescue_teams import router as rescue_teams_router
 from websocket_manager import manager
 
 app = FastAPI()
@@ -67,3 +68,4 @@ app.include_router(simulation_router)
 app.include_router(analytics_router)
 app.include_router(profiles_router)
 app.include_router(ingest_v2_router)
+app.include_router(rescue_teams_router)

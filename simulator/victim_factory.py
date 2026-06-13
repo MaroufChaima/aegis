@@ -1,269 +1,45 @@
-"""
-Factory function that creates all 15 simulated WBAN victims. Profiles are hardcoded
-to match the seed_profiles.py data exactly. The simulator is intentionally independent
-of the database to ensure it can run even if the backend is unreachable.
-"""
+"""Dynamic victim factory — builds users for one region from populations."""
 
 from physiological_profile import PhysiologicalProfile
 from victim_wban import VictimWBAN
+from demo_config import users_for_region, profile_for_user, sensors_for_user
 
 
-STANDARD_SENSORS = [
-    "heart_rate",
-    "spo2",
-    "temperature",
-    "blood_pressure_systolic",
-    "blood_pressure_diastolic",
-    "respiratory_rate",
-    "motion_activity",
-    "fall_detected",
-    "gps_lat",
-    "gps_lon",
-    "rssi",
-    "battery",
-]
+def create_victims_for_region(region_key: str) -> list:
+    victims = []
+    for user in users_for_region(region_key):
+        prof = profile_for_user(user["victim_id"])
+        profile = PhysiologicalProfile(
+            victim_id=user["victim_id"],
+            risk_category=user["risk_category"],
+            region_key=region_key,
+            hr_baseline=float(prof["hr_baseline"]),
+            hr_normal_min=float(prof["hr_normal_min"]),
+            hr_normal_max=float(prof["hr_normal_max"]),
+            temp_normal_min=float(prof["temp_normal_min"]),
+            temp_normal_max=float(prof["temp_normal_max"]),
+            spo2_normal_min=float(prof["spo2_normal_min"]),
+            rr_normal_min=float(prof["rr_normal_min"]),
+            rr_normal_max=float(prof["rr_normal_max"]),
+            glucose_normal_min=prof.get("glucose_normal_min"),
+            glucose_normal_max=prof.get("glucose_normal_max"),
+            bp_systolic_normal_min=float(prof["bp_systolic_normal_min"]),
+            bp_systolic_normal_max=float(prof["bp_systolic_normal_max"]),
+        )
+        victim = VictimWBAN(
+            victim_id=user["victim_id"],
+            name=user["name"],
+            risk_category=user["risk_category"],
+            uav_relay_id=None,
+            sensor_type_ids=sensors_for_user(user["victim_id"]),
+            profile=profile,
+            height_cm=user.get("height_cm"),
+            weight_kg=user.get("weight_kg"),
+            home_region=region_key,
+        )
+        victims.append(victim)
+    return victims
 
 
-def create_all_victims() -> list:
-    return [
-        VictimWBAN(
-            victim_id="V-001",
-            name="Ahmed Benali",
-            risk_category="healthy",
-            uav_relay_id="UAV-01",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-001", risk_category="healthy",
-                hr_baseline=70.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=95.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=130.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-002",
-            name="Fatima Zahra",
-            risk_category="healthy",
-            uav_relay_id="UAV-01",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-002", risk_category="healthy",
-                hr_baseline=72.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=95.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=125.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-003",
-            name="Karim Messaoud",
-            risk_category="diabetic",
-            uav_relay_id="UAV-01",
-            sensor_type_ids=STANDARD_SENSORS + ["glucose"],
-            profile=PhysiologicalProfile(
-                victim_id="V-003", risk_category="diabetic",
-                hr_baseline=74.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=94.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=70.0, glucose_normal_max=140.0,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=135.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-004",
-            name="Nadia Hamdi",
-            risk_category="diabetic",
-            uav_relay_id="UAV-02",
-            sensor_type_ids=STANDARD_SENSORS + ["glucose"],
-            profile=PhysiologicalProfile(
-                victim_id="V-004", risk_category="diabetic",
-                hr_baseline=76.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=94.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=70.0, glucose_normal_max=150.0,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=145.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-005",
-            name="Omar Cherif",
-            risk_category="cardiac",
-            uav_relay_id="UAV-02",
-            sensor_type_ids=STANDARD_SENSORS + ["ecg_hr_variability"],
-            profile=PhysiologicalProfile(
-                victim_id="V-005", risk_category="cardiac",
-                hr_baseline=65.0, hr_normal_min=50.0, hr_normal_max=95.0,
-                temp_normal_min=36.0, temp_normal_max=37.5,
-                spo2_normal_min=93.0,
-                rr_normal_min=12.0, rr_normal_max=22.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=140.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-006",
-            name="Leila Boudjedra",
-            risk_category="cardiac",
-            uav_relay_id="UAV-02",
-            sensor_type_ids=STANDARD_SENSORS + ["ecg_hr_variability"],
-            profile=PhysiologicalProfile(
-                victim_id="V-006", risk_category="cardiac",
-                hr_baseline=68.0, hr_normal_min=50.0, hr_normal_max=95.0,
-                temp_normal_min=36.0, temp_normal_max=37.5,
-                spo2_normal_min=93.0,
-                rr_normal_min=12.0, rr_normal_max=22.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=148.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-007",
-            name="Youcef Amrani",
-            risk_category="elderly",
-            uav_relay_id="UAV-03",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-007", risk_category="elderly",
-                hr_baseline=68.0, hr_normal_min=50.0, hr_normal_max=90.0,
-                temp_normal_min=35.8, temp_normal_max=37.3,
-                spo2_normal_min=93.0,
-                rr_normal_min=12.0, rr_normal_max=22.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=150.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-008",
-            name="Zohra Belkacem",
-            risk_category="elderly",
-            uav_relay_id="UAV-03",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-008", risk_category="elderly",
-                hr_baseline=70.0, hr_normal_min=50.0, hr_normal_max=90.0,
-                temp_normal_min=35.8, temp_normal_max=37.3,
-                spo2_normal_min=93.0,
-                rr_normal_min=12.0, rr_normal_max=22.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=155.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-009",
-            name="Rachid Talbi",
-            risk_category="athlete",
-            uav_relay_id="UAV-03",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-009", risk_category="athlete",
-                hr_baseline=52.0, hr_normal_min=38.0, hr_normal_max=80.0,
-                temp_normal_min=36.2, temp_normal_max=37.4,
-                spo2_normal_min=96.0,
-                rr_normal_min=10.0, rr_normal_max=18.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=125.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-010",
-            name="Samira Ouali",
-            risk_category="athlete",
-            uav_relay_id="UAV-04",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-010", risk_category="athlete",
-                hr_baseline=55.0, hr_normal_min=40.0, hr_normal_max=82.0,
-                temp_normal_min=36.2, temp_normal_max=37.4,
-                spo2_normal_min=96.0,
-                rr_normal_min=10.0, rr_normal_max=18.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=122.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-011",
-            name="Djamel Hadjadj",
-            risk_category="neurological",
-            uav_relay_id="UAV-04",
-            sensor_type_ids=STANDARD_SENSORS + ["eeg_alert_index"],
-            profile=PhysiologicalProfile(
-                victim_id="V-011", risk_category="neurological",
-                hr_baseline=72.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.6,
-                spo2_normal_min=94.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=135.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-012",
-            name="Amina Khelifi",
-            risk_category="pregnant",
-            uav_relay_id="UAV-04",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-012", risk_category="pregnant",
-                hr_baseline=80.0, hr_normal_min=60.0, hr_normal_max=105.0,
-                temp_normal_min=36.2, temp_normal_max=37.8,
-                spo2_normal_min=95.0,
-                rr_normal_min=14.0, rr_normal_max=22.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=130.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-013",
-            name="Hassan Benlazar",
-            risk_category="healthy",
-            uav_relay_id="UAV-01",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-013", risk_category="healthy",
-                hr_baseline=68.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=95.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=90.0, bp_systolic_normal_max=130.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-014",
-            name="Meriem Saidi",
-            risk_category="healthy",
-            uav_relay_id="UAV-02",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-014", risk_category="healthy",
-                hr_baseline=71.0, hr_normal_min=55.0, hr_normal_max=100.0,
-                temp_normal_min=36.1, temp_normal_max=37.5,
-                spo2_normal_min=95.0,
-                rr_normal_min=12.0, rr_normal_max=20.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=85.0, bp_systolic_normal_max=125.0,
-            ),
-        ),
-        VictimWBAN(
-            victim_id="V-015",
-            name="Bilal Ziani",
-            risk_category="child",
-            uav_relay_id="UAV-03",
-            sensor_type_ids=STANDARD_SENSORS,
-            profile=PhysiologicalProfile(
-                victim_id="V-015", risk_category="child",
-                hr_baseline=90.0, hr_normal_min=65.0, hr_normal_max=120.0,
-                temp_normal_min=36.3, temp_normal_max=38.0,
-                spo2_normal_min=96.0,
-                rr_normal_min=18.0, rr_normal_max=30.0,
-                glucose_normal_min=None, glucose_normal_max=None,
-                bp_systolic_normal_min=80.0, bp_systolic_normal_max=110.0,
-            ),
-        ),
-    ]
+def create_all_victims(region_key: str) -> list:
+    return create_victims_for_region(region_key)

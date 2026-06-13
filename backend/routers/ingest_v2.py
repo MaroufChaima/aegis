@@ -33,7 +33,7 @@ from services.victim_service import victim_exists, get_victim_profile_for_pipeli
 from services.preprocessing.imputation_service import impute_missing_readings, update_recent_readings_cache
 from services.preprocessing.confidence_scorer import assign_confidence_scores, compute_packet_confidence
 from services.preprocessing.packet_validator import validate_reading_ranges
-from services.victim_state_service import upsert_victim_current_state
+from services.victim_state_service import upsert_victim_current_state, get_victim_state
 from websocket_manager import manager as ws_manager
 
 router = APIRouter()
@@ -139,9 +139,8 @@ async def ingest_coordinator_packet(
             flat_readings[sensor_id] = reading_data["imputed_value"]
 
     # STEP 6d — Run AI pipeline
-    sos_active = bool(flat_readings.get('sos_signal', 0))
     ai_result = run_ai_pipeline(
-        packet.victim_id, flat_readings, victim_profile, sos_active=sos_active
+        packet.victim_id, flat_readings, victim_profile
     )
 
     # STEP 6e — Update anomaly flags in database
@@ -168,6 +167,8 @@ async def ingest_coordinator_packet(
         flat_readings=flat_readings,
         ai_result=ai_result,
     )
+
+    state_row = get_victim_state(db, packet.victim_id) or {}
 
     # STEP 7 — Print success log
     print(
@@ -204,8 +205,15 @@ async def ingest_coordinator_packet(
             'uav_relay_id': packet.uav_relay_id,
             'packet_completeness': packet.packet_completeness,
             'last_packet_quality': packet.packet_quality,
-            'status': 'sos' if sos_active else 'online',
-            'sos_active': 1 if sos_active else 0,
+            'status': (
+                'critical' if ai_result.get('priority_class') == 'P1'
+                else ('alert' if ai_result.get('is_anomaly') else 'online')
+            ),
+            'emergency_status': state_row.get('emergency_status', 'normal'),
+            'current_region': state_row.get('current_region'),
+            'altitude_m': state_row.get('altitude_m'),
+            'uav_backup_ids': state_row.get('uav_backup_ids', '[]'),
+            'home_region': state_row.get('home_region'),
             'last_seen': packet.timestamp,
             'risk_category': victim_profile.get('risk_category') if victim_profile else None,
             'sensor_statuses': packet.sensor_statuses or {},

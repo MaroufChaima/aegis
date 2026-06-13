@@ -15,5 +15,7 @@ from models.telemetry_reading import TelemetryReading               # New WBAN a
 from models.alert import Alert                                      # Alert model: keep existing import
 # WBAN current-state table: single row per victim, upserted on every packet
 from models.victim_current_state import VictimCurrentState
+from models.rescue_team import RescueTeam, Rescuer, TeamVictimAssignment, TeamUAVAssignment
+from models.emergency_event import EmergencyEvent
 from models.device import Device                                    # LEGACY: keep until M7 cleanup phase
 from models.telemetry import Telemetry                              # LEGACY: keep until M7 cleanup phase

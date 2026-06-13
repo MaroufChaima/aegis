@@ -1,60 +1,73 @@
 import { useState } from 'react'
 import ZoneMap from '../components/map/ZoneMap'
-import VictimTable from '../components/victims/VictimTable'
+import UserQueue from '../components/users/UserQueue'
 import VictimDetail from '../components/victims/VictimDetail'
 import AlertFeed from '../components/alerts/AlertFeed'
 import { useWebSocketContext } from '../contexts/WebSocketContext'
+import { REGIONS, REGION_KEYS } from '../utils/regions'
+import { pageTitle } from '../utils/themeClasses'
 
-/**
- * OverviewPage — primary operator view.
- *
- * Reads victims and alerts from WebSocketContext. GET /api/victims now
- * returns the full WBAN victim_current_state JOIN victims, so no
- * secondary enrichment fetch is needed.
- *
- * Clicking a row opens VictimDetail in a side panel.
- */
 export default function OverviewPage() {
-  const { victims, alerts } = useWebSocketContext()
-  const [selectedVictim, setSelectedVictim] = useState(null)
+  const { victims, alerts, uavs, region, setRegion } = useWebSocketContext()
+  const [selectedUser, setSelectedUser] = useState(null)
 
-  // Keep the detail panel in sync as WebSocket updates arrive.
-  const liveSelectedVictim = selectedVictim
-    ? (victims.find(v => v.victim_id === selectedVictim.victim_id) ?? selectedVictim)
+  const liveSelected = selectedUser
+    ? (victims.find((v) => v.victim_id === selectedUser.victim_id) ?? selectedUser)
     : null
+
+  const handleRegionChange = (key) => {
+    setRegion(key)
+    setSelectedUser(null)
+  }
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className={pageTitle}>Operations Overview</h2>
+        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-gray-300">
+          <span>Region</span>
+          <select
+            value={region}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            className="rounded-md border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+          >
+            {REGION_KEYS.map((key) => (
+              <option key={key} value={key}>{REGIONS[key].label}</option>
+            ))}
+          </select>
+        </label>
+      </div>
 
-      {/* Zone map */}
-      <div className="h-[480px] rounded-lg overflow-hidden border border-gray-700">
+      <div className="h-[480px] rounded-lg overflow-hidden border border-slate-200 dark:border-gray-700 shadow-sm">
         <ZoneMap
           victims={victims}
-          selectedVictimId={liveSelectedVictim?.victim_id ?? null}
-          onVictimClick={setSelectedVictim}
+          uavs={uavs}
+          regionKey={region}
+          selectedVictimId={liveSelected?.victim_id ?? null}
+          onVictimClick={setSelectedUser}
         />
       </div>
 
-      {/* Priority table + detail panel side-by-side when a victim is selected */}
-      <div className={`flex gap-4 items-start ${liveSelectedVictim ? 'flex-col lg:flex-row' : ''}`}>
-        <div className={liveSelectedVictim ? 'lg:flex-1 w-full' : 'w-full'}>
-          <VictimTable victims={victims} onRowClick={setSelectedVictim} />
+      <div className={`flex gap-4 items-start ${liveSelected ? 'flex-col lg:flex-row' : ''}`}>
+        <div className={liveSelected ? 'lg:flex-1 w-full' : 'w-full'}>
+          <UserQueue
+            users={victims}
+            selectedId={liveSelected?.victim_id}
+            onRowClick={setSelectedUser}
+          />
         </div>
-
-        {liveSelectedVictim && (
+        {liveSelected && (
           <div className="lg:w-96 w-full flex-shrink-0">
             <VictimDetail
-              victim={liveSelectedVictim}
+              victim={liveSelected}
               alerts={alerts}
-              onClose={() => setSelectedVictim(null)}
+              onClose={() => setSelectedUser(null)}
             />
           </div>
         )}
       </div>
 
-      {/* Alert feed */}
       <AlertFeed alerts={alerts} victims={victims} />
-
     </div>
   )
 }

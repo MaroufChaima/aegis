@@ -1,30 +1,15 @@
 """
 Rule-based triage scorer for the AEGIS WBAN AI pipeline.
-
-Pure functions only — no database access, no side effects, no external imports.
-All threshold comparisons use the personalized thresholds dict from threshold_engine.py
-rather than hardcoded values, enabling victim-specific triage scoring.
 """
 
 
 def compute_severity_score(
     readings_dict: dict,
     thresholds: dict,
-    sos_active: bool = False,
     seconds_without_movement: float = 0,
     seconds_offline: float = 0,
 ) -> int:
-    """Computes a severity score from 0 to 100 using personalized thresholds from the
-    victim profile. Every threshold comparison uses the thresholds dict rather than
-    hardcoded values so that an athlete with cardiac_low_hr of 36.1 is not penalized
-    for their naturally lower heart rate. The score is capped at 100 because multiple
-    simultaneous critical conditions can otherwise exceed 100."""
-
     score = 0
-
-    # SOS
-    if sos_active:
-        score += 55
 
     heart_rate = readings_dict.get("heart_rate")
     if heart_rate is not None and heart_rate < thresholds.get("cardiac_low_hr", 40.0):
@@ -76,9 +61,6 @@ def compute_severity_score(
 
 
 def classify_priority(score: int) -> str:
-    """Maps severity score to triage priority class. P1 requires immediate intervention.
-    P2 requires urgent attention. P3 is stable and can wait."""
-
     if score >= 70:
         return "P1"
     if score >= 40:

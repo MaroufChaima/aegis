@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
+import { card, cardInner, errorBanner, muted, pageTitle, sectionTitle } from '../utils/themeClasses'
+import { REGIONS, REGION_KEYS } from '../utils/regions'
 
 const SCENARIOS = [
   {
-    name: 'sos_wave',
-    label: 'SOS Wave',
-    description: '3 random devices raise SOS simultaneously.',
+    name: 'critical_vitals_wave',
+    label: 'Critical Vitals Wave',
+    description: '3 users spike to abnormal vitals (triggers automatic alerts).',
     color: 'red',
   },
   {
@@ -34,9 +36,18 @@ const SCENARIOS = [
 ]
 
 const COLOR_CLASSES = {
-  red:   { btn: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',   badge: 'bg-red-500/20 text-red-400 border-red-500/30' },
-  amber: { btn: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500', badge: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-  blue:  { btn: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500', badge: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+  red:   {
+    btn: 'bg-red-600 hover:bg-red-700 focus:ring-red-500',
+    badge: 'bg-red-100 text-red-700 border-red-300 dark:bg-red-500/20 dark:text-red-400 dark:border-red-500/30',
+  },
+  amber: {
+    btn: 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500',
+    badge: 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/20 dark:text-amber-400 dark:border-amber-500/30',
+  },
+  blue:  {
+    btn: 'bg-blue-600 hover:bg-blue-700 focus:ring-blue-500',
+    badge: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-500/20 dark:text-blue-400 dark:border-blue-500/30',
+  },
 }
 
 async function apiFetch(path, method = 'GET', body) {
@@ -63,12 +74,16 @@ export default function SimulationPage() {
   const [busy,            setBusy]            = useState(false)
   const [lastAction,      setLastAction]      = useState(null)
   const [error,           setError]           = useState(null)
+  const [region, setRegionLocal] = useState('algiers')
+  const [emergencyMode, setEmergencyMode] = useState(false)
 
   const refreshStatus = useCallback(async () => {
     try {
       const state = await apiFetch('/api/simulation/status')
       setRunning(state.running ?? true)
       setPendingScenario(state.scenario ?? null)
+      if (state.region) setRegionLocal(state.region)
+      setEmergencyMode(state.emergency_mode ?? false)
       setError(null)
     } catch (err) {
       setError('Cannot reach backend — is uvicorn running?')
@@ -108,6 +123,33 @@ export default function SimulationPage() {
     }
   }
 
+  async function handleRegionChange(regionKey) {
+    setBusy(true)
+    try {
+      await apiFetch('/api/simulation/region', 'POST', { region: regionKey })
+      setRegionLocal(regionKey)
+      setLastAction(`Simulator region set to ${REGIONS[regionKey]?.label ?? regionKey}.`)
+    } catch {
+      setLastAction('Region change failed — check backend logs.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleEmergencyToggle() {
+    setBusy(true)
+    const next = !emergencyMode
+    try {
+      await apiFetch('/api/simulation/emergency', 'POST', { emergency_mode: next })
+      setEmergencyMode(next)
+      setLastAction(next ? 'Emergency mode ON — UAVs set to active.' : 'Emergency mode OFF — UAVs on standby.')
+    } catch {
+      setLastAction('Emergency toggle failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleScenario(name) {
     setBusy(true)
     try {
@@ -126,14 +168,14 @@ export default function SimulationPage() {
 
       {/* ── Header ── */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">Simulation Control</h2>
+        <h2 className={pageTitle}>Simulation Control</h2>
         <div className="flex items-center gap-2">
           <span
             className={`w-2.5 h-2.5 rounded-full ${
               running ? 'bg-green-400' : 'bg-amber-400 animate-pulse'
             }`}
           />
-          <span className={`text-sm font-semibold ${running ? 'text-green-400' : 'text-amber-400'}`}>
+          <span className={`text-sm font-semibold ${running ? 'text-green-600 dark:text-green-400' : 'text-amber-600 dark:text-amber-400'}`}>
             {running ? 'Running' : 'Paused'}
           </span>
         </div>
@@ -141,19 +183,15 @@ export default function SimulationPage() {
 
       {/* ── Error banner ── */}
       {error && (
-        <div className="rounded-lg bg-red-900/30 border border-red-700 px-4 py-3 text-red-300 text-sm">
-          {error}
-        </div>
+        <div className={errorBanner}>{error}</div>
       )}
 
       {/* ── Status + Pause / Resume ── */}
-      <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-widest">
-          Simulator Control
-        </h3>
+      <section className={`${card} p-6 space-y-4`}>
+        <h3 className={sectionTitle}>Simulator Control</h3>
 
         {pendingScenario && (
-          <p className="text-xs text-amber-400">
+          <p className="text-xs text-amber-700 dark:text-amber-400">
             Pending scenario: <span className="font-mono font-bold">{pendingScenario}</span> (awaiting next tick)
           </p>
         )}
@@ -179,18 +217,42 @@ export default function SimulationPage() {
           </button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-gray-700">
+          <span className={`text-sm ${muted}`}>Active region</span>
+          <select
+            value={region}
+            onChange={(e) => handleRegionChange(e.target.value)}
+            disabled={busy}
+            className="rounded-md border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+          >
+            {REGION_KEYS.map((key) => (
+              <option key={key} value={key}>{REGIONS[key].label}</option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={handleEmergencyToggle}
+            disabled={busy}
+            className={`px-3 py-1 rounded text-sm font-semibold ${
+              emergencyMode
+                ? 'bg-red-600 text-white'
+                : 'bg-slate-200 dark:bg-gray-700 text-slate-800 dark:text-white'
+            }`}
+          >
+            {emergencyMode ? 'Emergency ON' : 'Emergency OFF'}
+          </button>
+        </div>
+
         {lastAction && (
-          <p className="text-xs text-gray-400 italic">{lastAction}</p>
+          <p className={`text-xs ${muted} italic`}>{lastAction}</p>
         )}
       </section>
 
       {/* ── Scenario Triggers ── */}
-      <section className="bg-gray-800 border border-gray-700 rounded-xl p-6 space-y-4">
+      <section className={`${card} p-6 space-y-4`}>
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-widest">
-            Emergency Scenarios
-          </h3>
-          <span className="text-xs text-gray-500">
+          <h3 className={sectionTitle}>Emergency Scenarios</h3>
+          <span className={`text-xs ${muted}`}>
             Applied on the simulator&apos;s next tick (~5–80s depending on tick progress)
           </span>
         </div>
@@ -201,12 +263,12 @@ export default function SimulationPage() {
             return (
               <div
                 key={sc.name}
-                className="bg-gray-900 border border-gray-700 rounded-lg p-4 flex flex-col gap-3"
+                className={`${cardInner} p-4 flex flex-col gap-3`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="font-semibold text-white text-sm">{sc.label}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{sc.description}</p>
+                    <p className="font-semibold text-slate-900 dark:text-white text-sm">{sc.label}</p>
+                    <p className={`text-xs ${muted} mt-0.5`}>{sc.description}</p>
                   </div>
                   {pendingScenario === sc.name && (
                     <span className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full border ${cls.badge}`}>

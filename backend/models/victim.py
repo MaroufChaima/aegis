@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text
+from sqlalchemy import Column, Float, Integer, Text
 from database import Base
 
 
@@ -16,5 +16,8 @@ class Victim(Base):
     risk_category      = Column(Text, nullable=True)                          # healthy | diabetic | cardiac | neurological | elderly | pregnant | athlete | child
     pregnancy_status   = Column(Integer, nullable=True, default=0)            # SQLite boolean: 0 or 1
     is_athlete         = Column(Integer, nullable=True, default=0)            # SQLite boolean: 0 or 1
+    height_cm          = Column(Float, nullable=True)
+    weight_kg          = Column(Float, nullable=True)
+    home_region        = Column(Text, nullable=True)                          # algiers | setif | ...
     notes              = Column(Text, nullable=True)
     created_at         = Column(Text, nullable=True)                          # ISO timestamp string

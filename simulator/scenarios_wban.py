@@ -1,8 +1,5 @@
 """
 WBAN emergency scenarios for simulator_wban.py.
-
-Each handler mutates VictimWBAN instances in memory. Changes flow through the
-next coordinator packet posted to /api/v2/ingest.
 """
 
 import datetime
@@ -10,19 +7,25 @@ import random
 
 import requests
 
+from demo_config import REGIONS
+
 UAV_UPDATE_URL = "http://localhost:8000/api/uavs/update"
 
 
-def sos_wave(victims: list) -> list[str]:
-    """Activate SOS on three random victims."""
+def critical_vitals_wave(victims: list) -> list[str]:
+    """Three victims spike to abnormal vitals (triggers automatic anomaly alerts)."""
     targets = random.sample(victims, min(3, len(victims)))
     for victim in targets:
-        victim.sos_active = True
+        victim.profile._reading_overrides = {
+            "heart_rate": 38.0,
+            "temperature": 39.8,
+            "spo2": 89.0,
+            "respiratory_rate": 26.0,
+        }
     return [v.victim_id for v in targets]
 
 
 def mass_casualty(victims: list) -> list[str]:
-    """Drop five victims to critical vitals via reading overrides."""
     targets = random.sample(victims, min(5, len(victims)))
     for victim in targets:
         victim.profile._reading_overrides = {
@@ -36,21 +39,26 @@ def mass_casualty(victims: list) -> list[str]:
     return [v.victim_id for v in targets]
 
 
-def uav_failure(victims: list) -> str:
-    """Take one UAV offline via the backend update endpoint."""
+def uav_failure(victims: list, uavs: list = None) -> str:
     relays = list({v.uav_relay_id for v in victims})
     target_uav = random.choice(relays)
+    region = REGIONS.get("algiers")
     payload = {
         "uav_id": target_uav,
         "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
-        "latitude": 36.7321,
-        "longitude": 3.0841,
+        "latitude": region["center"][0],
+        "longitude": region["center"][1],
         "altitude": 120.0,
         "battery": 0,
         "status": "offline",
         "coverage_radius": 500.0,
         "connected_devices": 0,
     }
+    if uavs:
+        for u in uavs:
+            if u.uav_id == target_uav:
+                u.status = "offline"
+                u.battery = 0
     try:
         requests.post(UAV_UPDATE_URL, json=payload, timeout=4)
     except requests.RequestException as exc:
@@ -59,7 +67,6 @@ def uav_failure(victims: list) -> str:
 
 
 def gradual_deterioration(victims: list) -> str:
-    """Escalate one victim's HR baseline over subsequent ticks."""
     target = random.choice(victims)
     target.profile.hr_baseline = max(target.profile.hr_baseline, 90.0)
     target.profile._deterioration_rate = 9
@@ -68,7 +75,6 @@ def gradual_deterioration(victims: list) -> str:
 
 
 def network_partition(victims: list) -> list[str]:
-    """Degrade connectivity for all victims on one UAV relay."""
     relays = list({v.uav_relay_id for v in victims})
     target_relay = random.choice(relays)
     affected = []
@@ -81,16 +87,13 @@ def network_partition(victims: list) -> list[str]:
 
 
 def apply_tick_effects(victims: list) -> None:
-    """Advance multi-tick scenario effects."""
     for victim in victims:
         profile = victim.profile
-
         ticks = getattr(profile, "_deterioration_ticks", 0)
         if ticks > 0:
             rate = getattr(profile, "_deterioration_rate", 9)
             profile.hr_baseline = min(200.0, profile.hr_baseline + rate)
             profile._deterioration_ticks = ticks - 1
-
         pticks = getattr(profile, "_partition_ticks", 0)
         if pticks > 0:
             profile._partition_ticks = pticks - 1
@@ -99,7 +102,7 @@ def apply_tick_effects(victims: list) -> None:
 
 
 SCENARIO_REGISTRY_WBAN = {
-    "sos_wave": sos_wave,
+    "critical_vitals_wave": critical_vitals_wave,
     "mass_casualty": mass_casualty,
     "uav_failure": uav_failure,
     "gradual_deterioration": gradual_deterioration,

@@ -21,13 +21,19 @@ class VictimWBAN:
         risk_category: str,
         profile: PhysiologicalProfile,
         sensor_type_ids: list,
-        uav_relay_id: str,
+        uav_relay_id: str = None,
+        height_cm=None,
+        weight_kg=None,
+        home_region=None,
     ):
         self.victim_id     = victim_id
         self.name          = name
         self.risk_category = risk_category
         self.uav_relay_id  = uav_relay_id
-        self.sos_active    = False
+        self.uav_backup_ids = []
+        self.height_cm     = height_cm
+        self.weight_kg     = weight_kg
+        self.home_region   = home_region
 
         self.sensors = [
             WearableSensor(
@@ -49,7 +55,10 @@ class VictimWBAN:
         self.coordinator.tick()
 
     def build_packet(self) -> dict:
-        return self.coordinator.build_packet(sos_active=self.sos_active)
+        return self.coordinator.build_packet()
+
+    def set_region(self, region_key: str):
+        self.profile.set_region(region_key)
 
     @property
     def profile(self):

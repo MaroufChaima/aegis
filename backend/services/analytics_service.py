@@ -1,9 +1,5 @@
 """
 Analytics query functions for the AEGIS dashboard.
-
-All queries target SQLite via SQLAlchemy ORM or raw text() SQL.
-Timestamps are stored as ISO 8601 TEXT; SQLite's strftime() function is used
-for time-bucketing since date_trunc() is a PostgreSQL-only function.
 """
 
 from datetime import datetime, timezone, timedelta
@@ -16,97 +12,198 @@ from models.uav import UAVPosition
 from services.victim_state_service import get_summary_stats
 
 
-def get_summary(db: Session) -> dict:
-    """Build the full analytics summary dict for GET /api/analytics/summary.
+def _count_alerts(db: Session, cutoff: str, region: str | None = None) -> list:
+    if region:
+        rows = db.execute(
+            text(
+                """
+                SELECT a.* FROM alerts a
+                JOIN victims v ON a.victim_id = v.victim_id
+                WHERE a.timestamp >= :cutoff
+                  AND v.home_region = :region
+                """
+            ),
+            {"cutoff": cutoff, "region": region},
+        ).fetchall()
+        return rows
+    return db.query(Alert).filter(Alert.timestamp >= cutoff).all()
 
-    Queries the devices, alerts, telemetry, and uav_positions tables and
-    aggregates the results into a single response dict.  All counts are
-    computed with a single pass over each table to minimise query overhead.
 
-    Args:
-        db: SQLAlchemy session.
+def get_summary(db: Session, scope: str = "global", region: str | None = None) -> dict:
+    """Build analytics summary for global or regional scope."""
+    if scope == "regional" and not region:
+        scope = "global"
 
-    Returns:
-        Dict matching the API_FLOW.md summary response shape.
-    """
-    # --- Victim / device counts (from WBAN victim_current_state table) ---
-    wban_stats = get_summary_stats(db)
-    total_victims      = wban_stats["total_victims"]
+    wban_stats = get_summary_stats(db, region if scope == "regional" else None)
+    total_victims = wban_stats["total_victims"]
     victims_by_priority = {"P1": 0, "P2": 0, "P3": 0, **wban_stats["victims_by_priority"]}
-    victims_by_status   = {"online": 0, "offline": 0, "sos": 0, **wban_stats["victims_by_status"]}
-    avg_hr   = wban_stats["avg_heart_rate"]   or 0.0
-    avg_temp = wban_stats["avg_temperature"]  or 0.0
+    victims_by_status = {"online": 0, "offline": 0, "critical": 0, "alert": 0, **wban_stats["victims_by_status"]}
 
-    # --- Alert counts (last 60 minutes) ---
     one_hour_ago = (
         datetime.now(timezone.utc) - timedelta(hours=1)
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    recent_alerts = (
-        db.query(Alert)
-        .filter(Alert.timestamp >= one_hour_ago)
-        .all()
-    )
-    total_alerts_last_hour = len(recent_alerts)
+    if scope == "regional" and region:
+        recent_alert_rows = db.execute(
+            text(
+                """
+                SELECT a.alert_type, a.severity FROM alerts a
+                JOIN victims v ON a.victim_id = v.victim_id
+                WHERE a.timestamp >= :cutoff AND v.home_region = :region
+                """
+            ),
+            {"cutoff": one_hour_ago, "region": region},
+        ).fetchall()
+    else:
+        recent_alerts = db.query(Alert).filter(Alert.timestamp >= one_hour_ago).all()
+        recent_alert_rows = [(a.alert_type, a.severity) for a in recent_alerts]
 
+    total_alerts_last_hour = len(recent_alert_rows)
     alerts_by_type: dict[str, int] = {}
-    for alert in recent_alerts:
-        atype = alert.alert_type or "unknown"
-        alerts_by_type[atype] = alerts_by_type.get(atype, 0) + 1
+    for atype, _ in recent_alert_rows:
+        key = atype or "unknown"
+        alerts_by_type[key] = alerts_by_type.get(key, 0) + 1
 
-    # --- UAV stats ---
-    uavs = db.query(UAVPosition).all()
-    uavs_online = wban_stats["uavs_online"]
+    uav_query = db.query(UAVPosition)
+    if scope == "regional" and region:
+        uav_query = uav_query.filter(
+            (UAVPosition.home_region == region) | (UAVPosition.current_region == region)
+        )
+    uavs = uav_query.all()
 
-    # Network coverage: victims whose relay UAV is currently active
-    active_relay_ids = {u.uav_id for u in uavs if u.status in ("active", "returning")}
-    relay_rows = db.execute(text(
-        "SELECT uav_relay_id FROM victim_current_state WHERE uav_relay_id IS NOT NULL"
-    )).fetchall()
-    covered = sum(1 for r in relay_rows if r[0] in active_relay_ids)
+    active_uavs = sum(1 for u in uavs if u.status == "active")
+    standby_uavs = sum(1 for u in uavs if u.status == "standby")
+    inactive_uavs = sum(1 for u in uavs if u.status in ("inactive", "offline"))
+
+    relay_ids = {u.uav_id for u in uavs if u.status in ("active", "standby")}
+    if scope == "regional" and region:
+        relay_rows = db.execute(
+            text(
+                """
+                SELECT vcs.uav_relay_id FROM victim_current_state vcs
+                JOIN victims v ON vcs.victim_id = v.victim_id
+                WHERE v.home_region = :region AND vcs.uav_relay_id IS NOT NULL
+                """
+            ),
+            {"region": region},
+        ).fetchall()
+    else:
+        relay_rows = db.execute(
+            text("SELECT uav_relay_id FROM victim_current_state WHERE uav_relay_id IS NOT NULL")
+        ).fetchall()
+    covered = sum(1 for r in relay_rows if r[0] in relay_ids)
     network_coverage_pct = round(covered / total_victims * 100) if total_victims else 0
 
-    return {
-        "total_victims":          total_victims,
-        "victims_by_priority":    victims_by_priority,
-        "victims_by_status":      victims_by_status,
+    # Rescue team counts (skeleton — full breakdown in R7/R8)
+    if scope == "regional" and region:
+        total_rescue_teams = db.execute(
+            text("SELECT COUNT(*) FROM rescue_teams WHERE current_region = :region"),
+            {"region": region},
+        ).scalar() or 0
+    else:
+        total_rescue_teams = db.execute(
+            text("SELECT COUNT(*) FROM rescue_teams")
+        ).scalar() or 0
+
+    teams_by_type, teams_by_status = _teams_by_type_status(
+        db, region if scope == "regional" else None
+    )
+
+    base = {
+        "scope": scope,
+        "region": region,
+        "total_victims": total_victims,
+        "total_users": total_victims,
+        "users_by_profile": _users_by_profile(db, region if scope == "regional" else None),
+        "victims_by_priority": victims_by_priority,
+        "victims_by_status": victims_by_status,
         "total_alerts_last_hour": total_alerts_last_hour,
-        "alerts_by_type":         alerts_by_type,
-        "avg_heart_rate":         avg_hr,
-        "avg_temperature":        avg_temp,
-        "uavs_online":            uavs_online,
-        "network_coverage_pct":   network_coverage_pct,
+        "active_alerts": total_alerts_last_hour,
+        "alerts_by_type": alerts_by_type,
+        "avg_heart_rate": wban_stats["avg_heart_rate"] or 0.0,
+        "avg_temperature": wban_stats["avg_temperature"] or 0.0,
+        "uavs_online": active_uavs,
+        "uavs_standby": standby_uavs,
+        "active_uavs": active_uavs,
+        "inactive_uavs": inactive_uavs,
+        "available_uavs": active_uavs + standby_uavs,
+        "total_uavs": len(uavs) if uavs else (
+            db.execute(text("SELECT COUNT(*) FROM uav_positions")).scalar() or 0
+        ),
+        "total_rescue_teams": total_rescue_teams,
+        "rescue_teams_by_type": teams_by_type,
+        "rescue_teams_by_status": teams_by_status,
+        "network_coverage_pct": network_coverage_pct,
+        "active_emergencies": wban_stats.get("active_emergencies", 0),
+        "deaths": 0,
+        "rescued_users": 0,
+        "emergency_history": [],
+        "regional_comparisons": [],
     }
+
+    if scope == "global":
+        base["regional_comparisons"] = _regional_comparisons(db)
+
+    return base
+
+
+def _users_by_profile(db: Session, region: str | None = None) -> dict:
+    if region:
+        rows = db.execute(
+            text(
+                "SELECT risk_category, COUNT(*) FROM victims WHERE home_region = :r GROUP BY risk_category"
+            ),
+            {"r": region},
+        ).fetchall()
+    else:
+        rows = db.execute(
+            text("SELECT risk_category, COUNT(*) FROM victims GROUP BY risk_category")
+        ).fetchall()
+    return {r[0] or "unknown": r[1] for r in rows}
+
+
+def _teams_by_type_status(db: Session, region: str | None = None) -> tuple[dict, dict]:
+    clause = "WHERE current_region = :r" if region else ""
+    params = {"r": region} if region else {}
+    type_rows = db.execute(
+        text(f"SELECT team_type, COUNT(*) FROM rescue_teams {clause} GROUP BY team_type"),
+        params,
+    ).fetchall()
+    status_rows = db.execute(
+        text(f"SELECT status, COUNT(*) FROM rescue_teams {clause} GROUP BY status"),
+        params,
+    ).fetchall()
+    return (
+        {r[0] or "unknown": r[1] for r in type_rows},
+        {r[0] or "unknown": r[1] for r in status_rows},
+    )
+
+
+def _regional_comparisons(db: Session) -> list[dict]:
+    rows = db.execute(
+        text(
+            """
+            SELECT v.home_region,
+                   COUNT(DISTINCT v.victim_id) as user_count,
+                   SUM(CASE WHEN vcs.emergency_status = 'victim' THEN 1 ELSE 0 END) as emergencies
+            FROM victims v
+            LEFT JOIN victim_current_state vcs ON v.victim_id = vcs.victim_id
+            WHERE v.home_region IS NOT NULL
+            GROUP BY v.home_region
+            ORDER BY v.home_region
+            """
+        )
+    ).fetchall()
+    return [
+        {"region": r[0], "user_count": r[1], "active_emergencies": r[2] or 0}
+        for r in rows
+    ]
 
 
 def get_timeseries(db: Session) -> list[dict]:
-    """Return alert counts binned into 5-minute intervals for the last 60 min.
-
-    Uses SQLite's strftime() to extract year/month/day/hour and the
-    integer-divided minute to form 5-minute bucket keys, then assembles the
-    full list of expected bins (including zero-count gaps) so the chart always
-    shows all 12 buckets.
-
-    Args:
-        db: SQLAlchemy session.
-
-    Returns:
-        List of dicts with keys: timestamp (ISO 8601 bin start), count, critical_count.
-    """
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    # SQLite: bucket by floor(minute / 5) * 5.
-    #
-    # Two SQLAlchemy / SQLite pitfalls avoided here:
-    #  1. printf('%02d') is only available in SQLite >= 3.38.0 (Feb 2022).
-    #     We use substr('00' || n, -2) instead, which works on all versions.
-    #  2. SQLAlchemy's text() parser treats any :word token as a named bind
-    #     parameter. Writing the colon as the SQL string literal ':' causes
-    #     SQLAlchemy to parse ':00Z' as bind parameter "00Z" and crash with
-    #     "A value is required for bind parameter '00Z'".
-    #     We use char(58) (ASCII for ':') to produce the colon character
-    #     without triggering the parameter parser.
     sql = text("""
         SELECT
             strftime('%Y-%m-%dT%H', timestamp)
@@ -127,20 +224,18 @@ def get_timeseries(db: Session) -> list[dict]:
         for row in rows
     }
 
-    # Build all 12 expected bins regardless of whether data exists
     bins: list[dict] = []
-    # Round now down to the current 5-minute boundary, then go back 11 buckets
     minute_floor = (now.minute // 5) * 5
     current_bin = now.replace(minute=minute_floor, second=0, microsecond=0)
-    oldest_bin  = current_bin - timedelta(minutes=55)  # 12 bins total
+    oldest_bin = current_bin - timedelta(minutes=55)
 
     t = oldest_bin
     while t <= current_bin:
         key = t.strftime("%Y-%m-%dT%H:%M:%SZ")
         entry = raw.get(key, {"count": 0, "critical_count": 0})
         bins.append({
-            "timestamp":     key,
-            "count":         entry["count"],
+            "timestamp": key,
+            "count": entry["count"],
             "critical_count": entry["critical_count"],
         })
         t += timedelta(minutes=5)

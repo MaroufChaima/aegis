@@ -1,31 +1,31 @@
 import { useWebSocketContext } from '../contexts/WebSocketContext'
 import UAVCard from '../components/uavs/UAVCard'
+import { muted, pageTitle } from '../utils/themeClasses'
+import { REGIONS, REGION_KEYS } from '../utils/regions'
 
-/**
- * UAVFleetPage — live grid of all simulated UAVs.
- *
- * Reads the uavs array from WebSocketContext (seeded via REST, then kept
- * current by uav_update WebSocket messages).  Renders one UAVCard per UAV
- * sorted alphabetically by uav_id.
- */
 export default function UAVFleetPage() {
-  const { uavs } = useWebSocketContext()
-
+  const { uavs, region, setRegion } = useWebSocketContext()
   const sorted = [...uavs].sort((a, b) => a.uav_id.localeCompare(b.uav_id))
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-lg font-bold text-white">UAV Fleet</h2>
-        <span className="text-sm text-gray-400">{sorted.length} unit{sorted.length !== 1 ? 's' : ''} tracked</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h2 className={pageTitle}>UAV Fleet — {REGIONS[region]?.label}</h2>
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          className="rounded border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+        >
+          {REGION_KEYS.map((k) => (
+            <option key={k} value={k}>{REGIONS[k].label}</option>
+          ))}
+        </select>
       </div>
 
       {sorted.length === 0 ? (
-        <p className="text-gray-500 text-sm text-center py-20">
-          Waiting for UAV telemetry…
-        </p>
+        <p className={`${muted} text-center py-20`}>No UAVs in this region yet.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
           {sorted.map((uav) => (
             <UAVCard key={uav.uav_id} uav={uav} />
           ))}

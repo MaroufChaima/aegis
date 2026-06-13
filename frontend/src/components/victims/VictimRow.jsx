@@ -2,35 +2,17 @@ import React from 'react'
 import { getPriorityColor } from '../../utils/priorityColors'
 import { PROFILE_COLORS } from '../../utils/constants'
 
-/**
- * Row background tint by priority class.
- * P1 → red tint, P2 → amber tint, everything else → transparent.
- */
 const ROW_BG = {
-  P1: 'bg-red-900/40',
-  P2: 'bg-amber-900/30',
+  P1: 'bg-red-50 dark:bg-red-900/40',
+  P2: 'bg-amber-50 dark:bg-amber-900/30',
 }
 
-/**
- * Format an ISO timestamp to a short HH:MM:SS local string.
- * Returns '—' if the value is null/undefined.
- */
 function formatTime(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
   return isNaN(d) ? iso : d.toLocaleTimeString()
 }
 
-/**
- * VictimRow — a single table row for one registered device.
- *
- * Displays priority, device ID (with optional profile badge), heart rate,
- * temperature, SOS state, last-seen time, and severity score bar.
- *
- * @param {{ victim: object, onClick: function }} props
- *   victim  — a device object from GET /api/victims or WebSocket state
- *   onClick — optional callback fired when the row is clicked
- */
 export default function VictimRow({ victim, onClick }) {
   const priority = victim.status === 'offline' ? 'offline' : (victim.priority_class ?? 'P3')
   const color = getPriorityColor(priority)
@@ -41,10 +23,9 @@ export default function VictimRow({ victim, onClick }) {
 
   return (
     <tr
-      className={`${rowBg} hover:bg-gray-700/50 transition-colors ${onClick ? 'cursor-pointer' : ''}`}
+      className={`${rowBg} hover:bg-slate-100 dark:hover:bg-gray-700/50 transition-colors ${onClick ? 'cursor-pointer' : ''}`}
       onClick={onClick}
     >
-      {/* Priority badge */}
       <td className="px-4 py-3">
         <span
           className="inline-block px-2 py-0.5 rounded text-xs font-bold text-white"
@@ -54,9 +35,8 @@ export default function VictimRow({ victim, onClick }) {
         </span>
       </td>
 
-      {/* Name + victim ID + optional profile badge */}
       <td className="px-4 py-3">
-        <div className="font-medium text-white">
+        <div className="font-medium text-slate-900 dark:text-white">
           {victim.name || victim.victim_id}
           {victim.risk_category && (
             <span
@@ -67,47 +47,45 @@ export default function VictimRow({ victim, onClick }) {
           )}
         </div>
         {victim.name && victim.victim_id && (
-          <div className="text-xs text-gray-400 font-mono mt-0.5">{victim.victim_id}</div>
+          <div className="text-xs text-slate-500 dark:text-gray-400 font-mono mt-0.5">
+            {victim.victim_id}
+          </div>
         )}
       </td>
 
-      {/* Heart rate — red if out of normal range */}
       <td className={`px-4 py-3 ${
         victim.heart_rate != null && (victim.heart_rate < 50 || victim.heart_rate > 120)
-          ? 'text-red-400 font-semibold'
+          ? 'text-red-600 dark:text-red-400 font-semibold'
           : ''
       }`}>
         {victim.heart_rate != null ? `${victim.heart_rate.toFixed(1)} bpm` : '—'}
       </td>
 
-      {/* Temperature — red if elevated */}
       <td className={`px-4 py-3 ${
         victim.temperature != null && victim.temperature > 38.5
-          ? 'text-red-400 font-semibold'
+          ? 'text-red-600 dark:text-red-400 font-semibold'
           : ''
       }`}>
         {victim.temperature != null ? `${victim.temperature.toFixed(1)} °C` : '—'}
       </td>
 
-      {/* SOS — red pill when active */}
       <td className="px-4 py-3">
         {victim.sos_active ? (
           <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white animate-pulse">
             SOS
           </span>
         ) : (
-          <span className="text-gray-500">—</span>
+          <span className="text-slate-400 dark:text-gray-500">—</span>
         )}
       </td>
 
-      <td className="px-4 py-3 text-gray-400 tabular-nums">
+      <td className="px-4 py-3 text-slate-500 dark:text-gray-400 tabular-nums">
         {formatTime(victim.last_seen)}
       </td>
 
-      {/* Severity score bar */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className="w-16 bg-gray-700 rounded-full h-1.5">
+          <div className="w-16 bg-slate-200 dark:bg-gray-700 rounded-full h-1.5">
             <div
               className="h-1.5 rounded-full"
               style={{

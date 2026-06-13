@@ -1,12 +1,6 @@
-/**
- * Fetches the current list of all UAVs from the REST endpoint.
- * Used for the initial seed of the UAV Fleet page before WebSocket
- * uav_update messages take over.
- *
- * @returns {Promise<Array>} Resolves to an array of UAV objects.
- */
-export async function fetchUAVs() {
-  const res = await fetch('/api/uavs')
-  if (!res.ok) throw new Error(`GET /api/uavs failed: ${res.status}`)
+export async function fetchUAVs(region) {
+  const url = region ? `/api/uavs?region=${encodeURIComponent(region)}` : '/api/uavs'
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`GET ${url} failed: ${res.status}`)
   return res.json()
 }

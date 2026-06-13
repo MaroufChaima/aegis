@@ -1,113 +1,48 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useTheme } from '../contexts/ThemeContext'
+import { useWebSocketContext } from '../contexts/WebSocketContext'
+import { card, errorBanner, muted, pageTitle } from '../utils/themeClasses'
+import { REGIONS, REGION_KEYS } from '../utils/regions'
+import { fetchAnalyticsSummary, fetchAnalyticsTimeseries } from '../api/analytics'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  PieChart, Pie, Cell, Tooltip as PieTooltip,
+  PieChart, Pie, Cell,
 } from 'recharts'
 
-// ── Colours ────────────────────────────────────────────────────────────────
-
-const PRIORITY_PIE_COLORS = {
-  P1: '#ef4444',   // red-500
-  P2: '#f97316',   // orange-500
-  P3: '#22c55e',   // green-500
-}
-
-// ── Helpers ─────────────────────────────────────────────────────────────────
-
-async function apiFetch(path) {
-  const res = await fetch(path)
-  if (!res.ok) throw new Error(`GET ${path} → ${res.status}`)
-  return res.json()
-}
-
-/** Format a bin ISO timestamp to a short HH:MM label for the x-axis. */
-function fmtBin(iso) {
-  if (!iso) return ''
-  return iso.slice(11, 16)   // "HH:MM"
-}
-
-// ── Sub-components ──────────────────────────────────────────────────────────
+const PRIORITY_COLORS = { P1: '#ef4444', P2: '#f97316', P3: '#22c55e' }
 
 function StatCard({ label, value, sub, accent }) {
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-5">
-      <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${accent ?? 'text-white'}`}>{value ?? '—'}</p>
-      {sub && <p className="text-xs text-gray-500 mt-1">{sub}</p>}
+    <div className={`${card} p-4`}>
+      <p className={`text-xs ${muted} uppercase tracking-widest mb-1`}>{label}</p>
+      <p className={`text-2xl font-bold ${accent ?? 'text-slate-900 dark:text-white'}`}>{value ?? '—'}</p>
+      {sub && <p className={`text-xs ${muted} mt-1`}>{sub}</p>}
     </div>
   )
 }
 
-function SectionHeader({ title, subtitle }) {
-  return (
-    <div className="flex items-baseline justify-between mb-4">
-      <h3 className="font-semibold text-white">{title}</h3>
-      {subtitle && <span className="text-xs text-gray-500">{subtitle}</span>}
-    </div>
-  )
-}
-
-// Custom tooltip for BarChart
-function BarTooltip({ active, payload, label }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs">
-      <p className="text-gray-400 mb-1">{label}</p>
-      {payload.map((p) => (
-        <p key={p.name} style={{ color: p.color }}>
-          {p.name}: <span className="font-bold">{p.value}</span>
-        </p>
-      ))}
-    </div>
-  )
-}
-
-// Custom tooltip for PieChart
-function PieTooltipContent({ active, payload }) {
-  if (!active || !payload?.length) return null
-  const { name, value } = payload[0]
-  return (
-    <div className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-xs">
-      <p style={{ color: PRIORITY_PIE_COLORS[name] }} className="font-bold">
-        {name}: {value}
-      </p>
-    </div>
-  )
-}
-
-
-// ── Main page ────────────────────────────────────────────────────────────────
-
-/**
- * AnalyticsPage — live analytics dashboard.
- *
- * Fetches /api/analytics/summary and /api/analytics/timeseries on mount
- * and every 30 seconds thereafter.  Renders:
- *   - Four summary stat cards
- *   - BarChart: alert frequency per 5-minute bin (last 60 min)
- *   - Donut PieChart: victim distribution by priority (P1/P2/P3)
- *   - Horizontal bar breakdown: alerts by type
- */
 export default function AnalyticsPage() {
-  const [summary,    setSummary]    = useState(null)
+  const { isDark } = useTheme()
+  const { region, setRegion } = useWebSocketContext()
+  const [scope, setScope] = useState('global')
+  const [summary, setSummary] = useState(null)
   const [timeseries, setTimeseries] = useState([])
-  const [error,      setError]      = useState(null)
-  const [lastRefresh, setLastRefresh] = useState(null)
+  const [error, setError] = useState(null)
 
   const refresh = useCallback(async () => {
     try {
+      const reg = scope === 'regional' ? region : undefined
       const [sum, ts] = await Promise.all([
-        apiFetch('/api/analytics/summary'),
-        apiFetch('/api/analytics/timeseries'),
+        fetchAnalyticsSummary(scope, reg),
+        fetchAnalyticsTimeseries(),
       ])
       setSummary(sum)
       setTimeseries(ts.bins ?? [])
       setError(null)
-      setLastRefresh(new Date().toLocaleTimeString())
     } catch (err) {
-      setError(`Analytics error: ${err.message}`)
+      setError(err.message)
     }
-  }, [])
+  }, [scope, region])
 
   useEffect(() => {
     refresh()
@@ -115,187 +50,128 @@ export default function AnalyticsPage() {
     return () => clearInterval(id)
   }, [refresh])
 
-  // Derived pie data
   const pieData = summary
-    ? Object.entries(summary.victims_by_priority).map(([name, value]) => ({ name, value }))
+    ? Object.entries(summary.victims_by_priority || {}).map(([name, value]) => ({ name, value }))
     : []
-  const totalVictims = summary?.total_victims ?? 0
 
-  // Alerts-by-type bar data (horizontal)
-  const alertTypeData = summary
-    ? Object.entries(summary.alerts_by_type ?? {})
-        .sort((a, b) => b[1] - a[1])
-        .map(([type, count]) => ({ type: type.replace(/_/g, ' '), count }))
+  const profileData = summary
+    ? Object.entries(summary.users_by_profile || {}).map(([name, value]) => ({ name, value }))
     : []
+
+  const chartGrid = isDark ? '#374151' : '#e2e8f0'
+  const chartTick = isDark ? '#9ca3af' : '#64748b'
 
   return (
-    <div className="space-y-8">
-
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">Analytics</h2>
-        <div className="flex items-center gap-3">
-          {lastRefresh && (
-            <span className="text-xs text-gray-500">Updated {lastRefresh}</span>
-          )}
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className={pageTitle}>Analytics</h2>
+        <div className="flex items-center gap-2">
           <button
-            onClick={refresh}
-            className="text-xs text-gray-400 hover:text-white px-2 py-1 rounded border border-gray-700 hover:border-gray-500 transition-colors"
+            type="button"
+            onClick={() => setScope('global')}
+            className={`px-3 py-1 rounded text-sm ${scope === 'global' ? 'bg-blue-600 text-white' : 'border border-slate-300 dark:border-gray-600'}`}
           >
-            Refresh
+            Global
           </button>
+          <button
+            type="button"
+            onClick={() => setScope('regional')}
+            className={`px-3 py-1 rounded text-sm ${scope === 'regional' ? 'bg-blue-600 text-white' : 'border border-slate-300 dark:border-gray-600'}`}
+          >
+            Regional
+          </button>
+          {scope === 'regional' && (
+            <select
+              value={region}
+              onChange={(e) => setRegion(e.target.value)}
+              className="rounded border border-slate-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm"
+            >
+              {REGION_KEYS.map((k) => (
+                <option key={k} value={k}>{REGIONS[k].label}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
 
-      {error && (
-        <div className="rounded-lg bg-red-900/30 border border-red-700 px-4 py-3 text-red-300 text-sm">
-          {error}
-        </div>
-      )}
+      {error && <div className={errorBanner}>{error}</div>}
 
-      {/* ── Summary stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Total Victims"
-          value={summary?.total_victims}
-          sub={`P1: ${summary?.victims_by_priority?.P1 ?? 0}  P2: ${summary?.victims_by_priority?.P2 ?? 0}  P3: ${summary?.victims_by_priority?.P3 ?? 0}`}
-        />
-        <StatCard
-          label="Alerts (last 60 min)"
-          value={summary?.total_alerts_last_hour}
-          accent="text-red-400"
-        />
-        <StatCard
-          label="Avg Heart Rate"
-          value={summary?.avg_heart_rate != null ? `${summary.avg_heart_rate} bpm` : null}
-        />
-        <StatCard
-          label="Network Coverage"
-          value={summary?.network_coverage_pct != null ? `${summary.network_coverage_pct}%` : null}
-          sub={`${summary?.uavs_online ?? 0} UAVs online`}
-          accent={
-            (summary?.network_coverage_pct ?? 100) >= 80
-              ? 'text-green-400'
-              : 'text-amber-400'
-          }
-        />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <StatCard label="Total Users" value={summary?.total_users} />
+        <StatCard label="Active Emergencies" value={summary?.active_emergencies} accent="text-red-600 dark:text-red-400" />
+        <StatCard label="Active Alerts (60m)" value={summary?.active_alerts} />
+        <StatCard label="Deaths" value={summary?.deaths ?? 0} />
+        <StatCard label="Rescued Users" value={summary?.rescued_users ?? 0} accent="text-green-600 dark:text-green-400" />
+        <StatCard label="UAVs Active" value={summary?.active_uavs} sub={`${summary?.uavs_standby ?? 0} standby`} />
+        <StatCard label="UAVs Inactive" value={summary?.inactive_uavs} />
+        <StatCard label="Rescue Teams" value={summary?.total_rescue_teams} />
+        <StatCard label="Network Coverage" value={summary?.network_coverage_pct != null ? `${summary.network_coverage_pct}%` : null} />
       </div>
 
-      {/* ── Charts row ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Bar chart — spans 2 columns */}
-        <div className="lg:col-span-2 bg-gray-800 border border-gray-700 rounded-xl p-6">
-          <SectionHeader
-            title="Alert Frequency"
-            subtitle="5-minute bins · last 60 minutes"
-          />
-          {timeseries.length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-16">No alert data yet.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`${card} p-5`}>
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Priority Distribution</h3>
+          {pieData.every((d) => d.value === 0) ? (
+            <p className={`${muted} text-sm text-center py-12`}>No data yet</p>
           ) : (
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={timeseries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis
-                  dataKey="timestamp"
-                  tickFormatter={fmtBin}
-                  tick={{ fill: '#9ca3af', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  allowDecimals={false}
-                  tick={{ fill: '#9ca3af', fontSize: 11 }}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <Tooltip content={<BarTooltip />} cursor={{ fill: 'rgba(255,255,255,0.04)' }} />
-                <Legend
-                  wrapperStyle={{ fontSize: 11, color: '#9ca3af', paddingTop: 8 }}
-                  formatter={(v) => v === 'count' ? 'All alerts' : 'Critical'}
-                />
-                <Bar dataKey="count"          name="count"          fill="#6366f1" radius={[3,3,0,0]} />
-                <Bar dataKey="critical_count" name="critical_count" fill="#ef4444" radius={[3,3,0,0]} />
-              </BarChart>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={pieData} dataKey="value" innerRadius={50} outerRadius={80} paddingAngle={3}>
+                  {pieData.map((e) => (
+                    <Cell key={e.name} fill={PRIORITY_COLORS[e.name] ?? '#6b7280'} />
+                  ))}
+                </Pie>
+              </PieChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* Donut chart — 1 column */}
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-          <SectionHeader title="Priority Distribution" />
-          {pieData.every((d) => d.value === 0) ? (
-            <p className="text-gray-500 text-sm text-center py-16">No device data yet.</p>
+        <div className={`${card} p-5`}>
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Users by Profile</h3>
+          {profileData.length === 0 ? (
+            <p className={`${muted} text-sm text-center py-12`}>No data</p>
           ) : (
-            <>
-              <div className="relative">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={60}
-                      outerRadius={88}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry) => (
-                        <Cell key={entry.name} fill={PRIORITY_PIE_COLORS[entry.name] ?? '#6b7280'} />
-                      ))}
-                    </Pie>
-                    <PieTooltip content={<PieTooltipContent />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Centre label — CSS overlay avoids Recharts viewBox prop issues */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-2xl font-bold text-white leading-none">{totalVictims}</span>
-                  <span className="text-xs text-gray-400 mt-1">victims</span>
+            <div className="space-y-2">
+              {profileData.map(({ name, value }) => (
+                <div key={name} className="flex justify-between text-sm">
+                  <span className="capitalize text-slate-700 dark:text-gray-300">{name}</span>
+                  <span className="font-mono">{value}</span>
                 </div>
-              </div>
-              {/* Legend */}
-              <div className="flex justify-center gap-5 mt-2">
-                {pieData.map((d) => (
-                  <div key={d.name} className="flex items-center gap-1.5 text-xs">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ background: PRIORITY_PIE_COLORS[d.name] }}
-                    />
-                    <span className="text-gray-300">{d.name}</span>
-                    <span className="text-gray-500">({d.value})</span>
-                  </div>
-                ))}
-              </div>
-            </>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      {/* ── Alerts by type breakdown ── */}
-      {alertTypeData.length > 0 && (
-        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
-          <SectionHeader title="Alerts by Type" subtitle="Last 60 minutes" />
-          <div className="space-y-3">
-            {alertTypeData.map(({ type, count }) => {
-              const max   = alertTypeData[0].count
-              const width = max > 0 ? Math.round((count / max) * 100) : 0
-              return (
-                <div key={type} className="flex items-center gap-3 text-sm">
-                  <span className="w-40 shrink-0 text-gray-300 capitalize">{type}</span>
-                  <div className="flex-1 bg-gray-700 rounded-full h-2 overflow-hidden">
-                    <div
-                      className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                      style={{ width: `${width}%` }}
-                    />
-                  </div>
-                  <span className="w-6 text-right text-gray-400 font-mono text-xs">{count}</span>
-                </div>
-              )
-            })}
+      {scope === 'global' && summary?.regional_comparisons?.length > 0 && (
+        <div className={`${card} p-5`}>
+          <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Regional Comparison</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {summary.regional_comparisons.map((r) => (
+              <div key={r.region} className="rounded border border-slate-200 dark:border-gray-700 p-3">
+                <p className="font-medium capitalize">{REGIONS[r.region]?.label ?? r.region}</p>
+                <p className={muted}>Users: {r.user_count}</p>
+                <p className="text-red-600 dark:text-red-400">Emergencies: {r.active_emergencies}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
+      <div className={`${card} p-5`}>
+        <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Alert Frequency (60 min)</h3>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={timeseries}>
+            <CartesianGrid strokeDasharray="3 3" stroke={chartGrid} />
+            <XAxis dataKey="timestamp" tickFormatter={(t) => t?.slice(11, 16)} tick={{ fill: chartTick, fontSize: 10 }} />
+            <YAxis allowDecimals={false} tick={{ fill: chartTick, fontSize: 10 }} />
+            <Tooltip />
+            <Legend />
+            <Bar dataKey="count" fill="#6366f1" name="All alerts" />
+            <Bar dataKey="critical_count" fill="#ef4444" name="Critical" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
     </div>
   )
 }

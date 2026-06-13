@@ -3,14 +3,17 @@ from typing import Optional
 
 
 class VictimStateOut(BaseModel):
-    """Response schema for victim current state. Combines victim identity fields from the victims table with operational state fields from victim_current_state. Used by GET /api/victims and GET /api/victims/{id}."""
-
     victim_id: str
     name: Optional[str] = None
     age: Optional[int] = None
     gender: Optional[str] = None
     risk_category: Optional[str] = None
     medical_conditions: Optional[str] = None
+    height_cm: Optional[float] = None
+    weight_kg: Optional[float] = None
+    home_region: Optional[str] = None
+    current_region: Optional[str] = None
+    emergency_status: Optional[str] = 'normal'
     severity_score: Optional[int] = 0
     priority_class: Optional[str] = 'P3'
     is_anomaly: Optional[int] = 0
@@ -24,9 +27,10 @@ class VictimStateOut(BaseModel):
     battery: Optional[float] = None
     gps_lat: Optional[float] = None
     gps_lon: Optional[float] = None
+    altitude_m: Optional[float] = None
     rssi: Optional[float] = None
     uav_relay_id: Optional[str] = None
-    sos_active: Optional[int] = 0
+    uav_backup_ids: Optional[str] = '[]'
     packet_completeness: Optional[float] = None
     status: Optional[str] = 'online'
     last_seen: Optional[str] = None

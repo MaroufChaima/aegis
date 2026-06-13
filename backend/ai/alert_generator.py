@@ -32,7 +32,6 @@ def decide_alerts(
     thresholds: dict,
     triage_result: dict,
     anomaly_result: dict,
-    sos_active: bool,
     victim_profile: dict,
 ) -> list:
     """Generates alert records based on triage results, anomaly detection, and
@@ -56,17 +55,7 @@ def decide_alerts(
         })
         _record_alert(victim_id, alert_type)
 
-    # ALERT 1 — SOS signal
-    if sos_active:
-        _emit(
-            alert_type="sos_signal",
-            severity="critical",
-            message=f"{victim_id}: SOS signal activated. Immediate rescue required.",
-            ai_confidence=1.0,
-            is_personal_alert=False,
-        )
-
-    # ALERT 2 — P1 classification
+    # ALERT 1 — P1 classification
     if triage_result.get("priority_class") == "P1" and triage_result.get("severity_score", 0) >= 70:
         risk_cat = victim_profile.get("risk_category", "unknown") if victim_profile else "unknown"
         _emit(

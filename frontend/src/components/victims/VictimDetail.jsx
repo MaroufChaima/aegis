@@ -14,6 +14,8 @@ import AlertRow from '../alerts/AlertRow'
 import ProfileRangesModal from './ProfileRangesModal'
 import VictimHistoryModal from './VictimHistoryModal'
 import { fetchVictimProfile } from '../../api/profiles'
+import { getPriorityVital } from '../../utils/priorityVital'
+import { isVictimStatus, getDisplayLabel } from '../../utils/userLabel'
 
 function formatTime(iso) {
   if (!iso) return '—'
@@ -88,7 +90,7 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
 
   if (!victim) {
     return (
-      <div className="p-4 text-gray-400 text-sm">No victim selected.</div>
+      <div className="p-4 text-slate-500 dark:text-gray-400 text-sm">No user selected.</div>
     )
   }
 
@@ -102,7 +104,7 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
   const hasPersonalProfile = victimProfile && displayCategory && displayCategory !== 'healthy'
 
   return (
-    <div className="bg-gray-800 rounded-lg border border-gray-700 p-4 space-y-4 max-h-[85vh] overflow-y-auto">
+    <div className="bg-white dark:bg-gray-800 rounded-lg border border-slate-200 dark:border-gray-700 p-4 space-y-4 max-h-[85vh] overflow-y-auto shadow-sm">
 
       {/* Victim information card */}
       <div className="flex items-start justify-between gap-2">
@@ -114,7 +116,7 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
             >
               {priority}
             </span>
-            <span className="font-semibold text-white truncate">
+            <span className="font-semibold text-slate-900 dark:text-white truncate">
               {victim.name || victim.victim_id}
             </span>
             {displayCategory && (
@@ -124,24 +126,37 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
                 {displayCategory}
               </span>
             )}
-            {victim.sos_active ? (
-              <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white animate-pulse">
-                SOS
+            {isVictimStatus(victim) ? (
+              <span className="inline-block px-2 py-0.5 rounded text-xs font-bold bg-red-600 text-white">
+                Victim
               </span>
-            ) : null}
+            ) : (
+              <span className="inline-block px-2 py-0.5 rounded text-xs font-medium bg-slate-200 dark:bg-gray-700 text-slate-700 dark:text-gray-300">
+                User
+              </span>
+            )}
           </div>
-          <p className="text-xs text-gray-400 font-mono">{victim.victim_id}</p>
+          <p className="text-xs text-slate-500 dark:text-gray-400 font-mono">{victim.victim_id}</p>
           {(victim.age != null || victim.gender) && (
-            <p className="text-xs text-gray-400">
+            <p className="text-xs text-slate-500 dark:text-gray-400">
               {[victim.age != null ? `${victim.age} yrs` : null, victim.gender].filter(Boolean).join(' · ')}
             </p>
           )}
+          <p className="text-xs text-slate-500 dark:text-gray-400">
+            {getPriorityVital(victim).label}: <span className="font-semibold text-slate-800 dark:text-gray-200">{getPriorityVital(victim).formatted}</span>
+          </p>
+          {(victim.gps_lat != null) && (
+            <p className="text-xs text-slate-500 dark:text-gray-400 font-mono">
+              {victim.gps_lat.toFixed(4)}, {victim.gps_lon?.toFixed(4)}
+              {victim.altitude_m != null ? ` · ${victim.altitude_m.toFixed(0)} m` : ''}
+            </p>
+          )}
           {conditions.length > 0 && (
-            <p className="text-xs text-amber-300/90">
+            <p className="text-xs text-amber-700 dark:text-amber-300/90">
               Conditions: {conditions.join(', ')}
             </p>
           )}
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-slate-500 dark:text-gray-500">
             Severity {victim.severity_score ?? 0} · Last seen {formatTime(victim.last_seen)}
           </p>
         </div>
@@ -149,7 +164,7 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
           <button
             type="button"
             onClick={() => setShowHistory(true)}
-            className="text-xs px-2 py-1 rounded border border-gray-600 text-gray-300 hover:text-white hover:border-gray-500"
+            className="text-xs px-2 py-1 rounded border border-slate-300 text-slate-600 hover:bg-slate-50 dark:border-gray-600 dark:text-gray-300 dark:hover:text-white dark:hover:border-gray-500 transition-colors"
             aria-label="View vital history"
           >
             History
@@ -158,7 +173,7 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
             <button
               type="button"
               onClick={onClose}
-              className="text-gray-400 hover:text-white text-sm leading-none"
+              className="text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-white text-sm leading-none"
               aria-label="Close panel"
             >
               ✕
@@ -169,18 +184,18 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
 
       {/* Alerts — first actionable section */}
       <section>
-        <h3 className="text-sm font-semibold text-gray-200 mb-2 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-800 dark:text-gray-200 mb-2 flex items-center gap-2">
           Alerts
           {victimAlerts.length > 0 && (
-            <span className="text-xs bg-red-900/50 text-red-300 px-1.5 py-0.5 rounded-full">
+            <span className="text-xs bg-red-100 text-red-700 dark:bg-red-900/50 dark:text-red-300 px-1.5 py-0.5 rounded-full">
               {victimAlerts.length}
             </span>
           )}
         </h3>
-        <div className="rounded-lg overflow-hidden border border-gray-700 divide-y divide-gray-700/60">
+        <div className="rounded-lg overflow-hidden border border-slate-200 dark:border-gray-700 divide-y divide-slate-200 dark:divide-gray-700/60">
           {victimAlerts.length === 0 ? (
-            <p className="px-3 py-4 text-center text-gray-500 text-xs">
-              No alerts for this victim
+            <p className="px-3 py-4 text-center text-slate-500 dark:text-gray-500 text-xs">
+              No alerts for this user
             </p>
           ) : (
             victimAlerts.slice(0, 8).map((alert, i) => (
@@ -197,15 +212,15 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
       {/* Vital signs — physiological only */}
       <section>
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h3 className="text-sm font-semibold text-gray-200">Vital Signs</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-gray-200">Vital Signs</h3>
           {victimProfile && (
             <button
               type="button"
               onClick={() => setShowProfileRanges(true)}
               className={`text-xs px-2 py-1 rounded border transition-colors ${
                 hasPersonalProfile
-                  ? 'border-blue-500/60 text-blue-300 hover:bg-blue-900/30'
-                  : 'border-gray-600 text-gray-400 hover:bg-gray-700/50'
+                  ? 'border-blue-400 text-blue-700 hover:bg-blue-50 dark:border-blue-500/60 dark:text-blue-300 dark:hover:bg-blue-900/30'
+                  : 'border-slate-300 text-slate-500 hover:bg-slate-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700/50'
               }`}
             >
               View normal ranges
@@ -216,9 +231,9 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
           <button
             type="button"
             onClick={() => setShowProfileRanges(true)}
-            className="w-full text-left text-xs text-blue-200/90 bg-blue-900/25 border border-blue-600/40 rounded px-2 py-1.5 mb-2 hover:bg-blue-900/40 transition-colors"
+            className="w-full text-left text-xs text-blue-800 bg-blue-50 border border-blue-200 rounded px-2 py-1.5 mb-2 hover:bg-blue-100 dark:text-blue-200/90 dark:bg-blue-900/25 dark:border-blue-600/40 dark:hover:bg-blue-900/40 transition-colors"
           >
-            This victim has a <span className="font-medium">{displayCategory}</span> profile.
+            This user has a <span className="font-medium">{displayCategory}</span> profile.
             Tap to see their personalized normal ranges before interpreting vitals.
           </button>
         )}
@@ -233,25 +248,25 @@ export default function VictimDetail({ victim, alerts = [], onClose }) {
             return (
               <div
                 key={key}
-                className="bg-gray-700/60 rounded p-3 border border-transparent"
+                className="bg-slate-50 dark:bg-gray-700/60 rounded p-3 border border-slate-100 dark:border-transparent"
               >
-                <p className="text-xs text-gray-400 mb-0.5">{def.label}</p>
+                <p className="text-xs text-slate-500 dark:text-gray-400 mb-0.5">{def.label}</p>
                 <p className={`text-lg font-semibold ${
-                  outOfRange ? 'text-red-400' : 'text-white'
+                  outOfRange ? 'text-red-600 dark:text-red-400' : 'text-slate-900 dark:text-white'
                 }`}>
                   {value != null ? def.format(value) : '—'}
-                  <span className="text-xs font-normal text-gray-400 ml-1">{def.unit}</span>
+                  <span className="text-xs font-normal text-slate-500 dark:text-gray-400 ml-1">{def.unit}</span>
                 </p>
                 {rangeHint && (
-                  <p className="text-[10px] text-gray-500 mt-0.5">{rangeHint}</p>
+                  <p className="text-[10px] text-slate-400 dark:text-gray-500 mt-0.5">{rangeHint}</p>
                 )}
               </div>
             )
           })}
           {/* GPS position */}
-          <div className="bg-gray-700/60 rounded p-3 col-span-2">
-            <p className="text-xs text-gray-400 mb-0.5">Position (GPS)</p>
-            <p className="text-sm font-semibold text-white">
+          <div className="bg-slate-50 dark:bg-gray-700/60 rounded p-3 col-span-2 border border-slate-100 dark:border-transparent">
+            <p className="text-xs text-slate-500 dark:text-gray-400 mb-0.5">Position (GPS)</p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
               {victim.gps_lat != null
                 ? `${victim.gps_lat.toFixed(4)}, ${victim.gps_lon.toFixed(4)}`
                 : '—'}

@@ -31,6 +31,7 @@ class PhysiologicalProfile:
         glucose_normal_max,
         bp_systolic_normal_min: float,
         bp_systolic_normal_max: float,
+        region_key: str = "algiers",
     ):
         self.victim_id             = victim_id
         self.risk_category         = risk_category
@@ -47,9 +48,27 @@ class PhysiologicalProfile:
         self.bp_systolic_normal_min = bp_systolic_normal_min
         self.bp_systolic_normal_max = bp_systolic_normal_max
 
-        self._gps_lat = 36.7325 + np.random.uniform(-0.01, 0.01)
-        self._gps_lon = 3.0862 + np.random.uniform(-0.01, 0.01)
+        self.region_key = region_key
+        self._init_gps_for_region(region_key)
         self._battery = 100.0
+
+    def _init_gps_for_region(self, region_key: str):
+        from demo_config import REGIONS
+        region = REGIONS.get(region_key, REGIONS["algiers"])
+        lat, lon = region["center"]
+        r = region.get("radius", 0.01)
+        alt_base = region.get("alt_base", 20)
+        self._gps_lat = lat + np.random.uniform(-r, r)
+        self._gps_lon = lon + np.random.uniform(-r, r)
+        self._altitude_m = alt_base + np.random.uniform(-3, 3)
+
+    @property
+    def altitude_m(self) -> float:
+        return self._altitude_m + np.random.uniform(-0.5, 0.5)
+
+    def set_region(self, region_key: str):
+        self.region_key = region_key
+        self._init_gps_for_region(region_key)
 
     def _clamp(self, value: float, min_val: float, max_val: float) -> float:
         return max(min_val, min(max_val, value))
@@ -106,6 +125,9 @@ class PhysiologicalProfile:
 
         if sensor_type_id == "gps_lon":
             return self._gps_lon + np.random.normal(0, 0.0001)
+
+        if sensor_type_id == "altitude_m":
+            return round(self.altitude_m, 1)
 
         if sensor_type_id == "rssi":
             raw = np.random.normal(-80.0, 8.0)

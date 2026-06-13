@@ -1,7 +1,6 @@
 """
-Seeds 15 victims into the victims table covering all profile types: healthy adult,
-diabetic, cardiac, elderly, athlete, neurological, pregnant, and child. These profiles
-enable testing of personalized physiological thresholds in the decision engine.
+Seeds 15 victims into the victims table.
+Run from backend/: python data/seed_victims.py
 """
 
 import sys
@@ -11,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database import engine
 from sqlalchemy import text
 from datetime import datetime
+from data.demo_config import VICTIM_EXTRA
 
 NOW = datetime.utcnow().isoformat()
 
@@ -183,20 +183,30 @@ VICTIMS = [
 ]
 
 
-with engine.connect() as conn:
-    for victim in VICTIMS:
-        victim["created_at"] = NOW
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO victims "
-                "(victim_id, name, age, gender, medical_conditions, risk_category, "
-                "pregnancy_status, is_athlete, notes, created_at) "
-                "VALUES (:victim_id, :name, :age, :gender, :medical_conditions, :risk_category, "
-                ":pregnancy_status, :is_athlete, :notes, :created_at)"
-            ),
-            victim,
-        )
-    conn.commit()
-    print("Victims seeded. Total rows in victims table:")
-    result = conn.execute(text("SELECT COUNT(*) FROM victims"))
-    print(result.scalar())
+def seed():
+    with engine.connect() as conn:
+        for victim in VICTIMS:
+            extra = VICTIM_EXTRA.get(victim["victim_id"], {})
+            victim = {**victim, **extra, "created_at": NOW}
+            conn.execute(
+                text(
+                    """
+                    INSERT OR IGNORE INTO victims
+                    (victim_id, name, age, gender, medical_conditions, risk_category,
+                     pregnancy_status, is_athlete, notes, created_at,
+                     height_cm, weight_kg, home_region)
+                    VALUES
+                    (:victim_id, :name, :age, :gender, :medical_conditions, :risk_category,
+                     :pregnancy_status, :is_athlete, :notes, :created_at,
+                     :height_cm, :weight_kg, :home_region)
+                    """
+                ),
+                victim,
+            )
+        conn.commit()
+        result = conn.execute(text("SELECT COUNT(*) FROM victims"))
+        print(f"Victims seeded. Total rows: {result.scalar()}")
+
+
+if __name__ == "__main__":
+    seed()

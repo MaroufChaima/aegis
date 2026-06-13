@@ -1,4 +1,6 @@
 {
   "running": true,
-  "scenario": null
+  "scenario": "mass_casualty",
+  "region": "algiers",
+  "emergency_mode": false
 }
